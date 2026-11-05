@@ -1,0 +1,6 @@
+{
+  "name": "Simple DesDoc",
+  "description": "Minimalist Markdown and HTML design document writer with frontmatter editor, live preview, drag-and-drop media, and zip export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import { Header } from './components/Header';
 import { MarkdownEditor } from './components/MarkdownEditor';
 import { DocumentPreview } from './components/DocumentPreview';
@@ -19,15 +20,56 @@ import { exportProjectZip, downloadMarkdownFile, downloadHtmlFile } from './util
 import { USER_EMBEDDED_CSS } from './utils/defaultStyle';
 import { cleanRunawayBackslashes } from './utils/htmlToMarkdown';
 
+const LOCAL_STORAGE_KEY = 'simple_desdoc_project_backup';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('writer');
   const [viewMode, setViewMode] = useState<ViewMode>('split');
-  const [rawMarkdown, setRawMarkdown] = useState<string>(() => cleanRunawayBackslashes(INITIAL_MARKDOWN));
-  const [assets, setAssets] = useState<ProjectAsset[]>(DEFAULT_ASSETS);
-  const [customCss, setCustomCss] = useState<string>(USER_EMBEDDED_CSS); // Initialized with user's embedded CSS
+
+  // Load initial state from local storage if available, fallback to defaults
+  const [rawMarkdown, setRawMarkdown] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.rawMarkdown === 'string' && parsed.rawMarkdown.trim()) {
+          return cleanRunawayBackslashes(parsed.rawMarkdown);
+        }
+      }
+    } catch (e) {}
+    return cleanRunawayBackslashes(INITIAL_MARKDOWN);
+  });
+
+  const [assets, setAssets] = useState<ProjectAsset[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed.assets) && parsed.assets.length > 0) {
+          return parsed.assets;
+        }
+      }
+    } catch (e) {}
+    return DEFAULT_ASSETS;
+  });
+
+  const [customCss, setCustomCss] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.customCss === 'string') {
+          return parsed.customCss;
+        }
+      }
+    } catch (e) {}
+    return USER_EMBEDDED_CSS;
+  });
+
   const [frontmatterOpen, setFrontmatterOpen] = useState(false);
   const [mediaManagerOpen, setMediaManagerOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Parse frontmatter and body reactively
   const { frontmatter, body } = useMemo(() => {
@@ -95,6 +137,35 @@ export default function App() {
     });
   }, []);
 
+  const saveToLocalStorage = useCallback((md: string, css: string, assetList: ProjectAsset[]) => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+        rawMarkdown: md,
+        customCss: css,
+        assets: assetList,
+        savedAt: Date.now()
+      }));
+    } catch (err) {
+      console.warn('LocalStorage save warning (asset quota limit):', err);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+          rawMarkdown: md,
+          customCss: css,
+          assets: [],
+          savedAt: Date.now()
+        }));
+      } catch (e) {}
+    }
+  }, []);
+
+  // Debounced auto-save to browser local storage
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveToLocalStorage(rawMarkdown, customCss, assets);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [rawMarkdown, customCss, assets, saveToLocalStorage]);
+
   const handleRemoveAsset = useCallback((id: string) => {
     setAssets(prev => prev.filter(a => a.id !== id));
   }, []);
@@ -103,17 +174,40 @@ export default function App() {
     setRawMarkdown(prev => prev + '\n' + snippet);
   }, []);
 
-  const handleExportZip = useCallback(async () => {
+  // Saves to local storage AND exports the project ZIP (triggered by button or Ctrl+S)
+  const handleSaveProject = useCallback(async () => {
     try {
       setIsExporting(true);
+      // 1. Immediately persist state to browser local storage
+      saveToLocalStorage(rawMarkdown, customCss, assets);
+
+      // 2. Export & download the full ZIP to local disk
       await exportProjectZip(frontmatter, rawMarkdown, assets, customCss);
+
+      // 3. Show feedback toast
+      setToastMessage('Saved to local storage & exported ZIP (Ctrl+S)');
+      setTimeout(() => setToastMessage(null), 3000);
     } catch (err) {
       console.error('Failed to export project zip:', err);
-      alert('Export failed. Please check console for details.');
+      setToastMessage('Save failed. Please check console for details.');
+      setTimeout(() => setToastMessage(null), 3000);
     } finally {
       setIsExporting(false);
     }
-  }, [frontmatter, rawMarkdown, assets, customCss]);
+  }, [frontmatter, rawMarkdown, assets, customCss, saveToLocalStorage]);
+
+  // Global window listener for Ctrl+S / Cmd+S
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveProject();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSaveProject]);
 
   const handleDownloadMd = useCallback(() => {
     downloadMarkdownFile(rawMarkdown, frontmatter);
@@ -124,15 +218,25 @@ export default function App() {
   }, [frontmatter, body, customCss]);
 
   const handleResetTemplate = useCallback(() => {
+    try {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+    } catch (e) {}
     setRawMarkdown(cleanRunawayBackslashes(INITIAL_MARKDOWN));
     setAssets(DEFAULT_ASSETS);
+    setCustomCss(USER_EMBEDDED_CSS);
+    setToastMessage('Template reset to blank');
+    setTimeout(() => setToastMessage(null), 2500);
   }, []);
 
   const handleImportMd = useCallback((text: string, filename?: string) => {
     if (!text || !text.trim()) return;
-    setRawMarkdown(cleanRunawayBackslashes(text));
+    const cleaned = cleanRunawayBackslashes(text);
+    setRawMarkdown(cleaned);
+    saveToLocalStorage(cleaned, customCss, assets);
     setActiveTab('writer');
-  }, []);
+    setToastMessage(`Imported ${filename || 'markdown file'}`);
+    setTimeout(() => setToastMessage(null), 2500);
+  }, [customCss, assets, saveToLocalStorage]);
 
   // Global drag-and-drop listener on page
   const handleGlobalDragOver = (e: React.DragEvent) => {
@@ -187,7 +291,7 @@ export default function App() {
         assets={assets}
         frontmatter={frontmatter}
         customCss={customCss}
-        onExportZip={handleExportZip}
+        onExportZip={handleSaveProject}
         onDownloadMd={handleDownloadMd}
         onDownloadHtml={handleDownloadHtml}
         onImportMd={handleImportMd}
@@ -226,6 +330,7 @@ export default function App() {
                     onDropFiles={handleAddFiles}
                     assets={assets}
                     onOpenMediaManager={() => setMediaManagerOpen(true)}
+                    onSaveShortcut={handleSaveProject}
                   />
                 </div>
                 <div className="w-full md:w-1/2 h-1/2 md:h-full flex flex-col">
@@ -236,6 +341,7 @@ export default function App() {
                     onMarkdownBodyChange={handleMarkdownBodyChange}
                     assets={assets}
                     customCss={customCss}
+                    onSaveShortcut={handleSaveProject}
                   />
                 </div>
               </div>
@@ -249,6 +355,7 @@ export default function App() {
                 onMarkdownBodyChange={handleMarkdownBodyChange}
                 assets={assets}
                 customCss={customCss}
+                onSaveShortcut={handleSaveProject}
               />
             )}
 
@@ -282,6 +389,14 @@ export default function App() {
           </>
         )}
       </div>
+
+      {/* Save Notification Toast */}
+      {toastMessage && (
+        <div className="fixed bottom-4 right-4 bg-white text-black border border-white px-3.5 py-2 rounded shadow-2xl flex items-center gap-2.5 z-50 text-xs font-mono font-bold animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 }

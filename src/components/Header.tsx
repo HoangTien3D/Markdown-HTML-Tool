@@ -215,13 +215,17 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={onExportZip}
           disabled={isExporting}
           className="flex items-center gap-2 px-3.5 py-1.5 bg-white text-black hover:bg-neutral-200 active:bg-neutral-300 rounded text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-sm"
+          title="Save project & export ZIP to local storage (Ctrl+S / Cmd+S)"
         >
           {isExporting ? (
             <div className="w-3.5 h-3.5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
           ) : (
             <Download className="w-3.5 h-3.5" />
           )}
-          <span>Export(.zip)</span>
+          <span>Save (.zip)</span>
+          <kbd className="hidden lg:inline px-1 py-0.5 bg-neutral-200 text-black text-[10px] font-mono rounded border border-neutral-300 font-semibold">
+            Ctrl+S
+          </kbd>
         </button>
 
         {/* Dropdown for individual downloads */}

@@ -21,6 +21,7 @@ interface MarkdownEditorProps {
   onDropFiles: (files: File[]) => void;
   assets: ProjectAsset[];
   onOpenMediaManager: () => void;
+  onSaveShortcut?: () => void;
 }
 
 const COMMON_SNIPPETS = [
@@ -40,12 +41,20 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   onDropFiles,
   assets,
   onOpenMediaManager,
+  onSaveShortcut,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showSectionMenu, setShowSectionMenu] = useState(false);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Intercept Ctrl+S / Cmd+S
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      onSaveShortcut?.();
+      return;
+    }
+
     if (e.key === 'Tab') {
       e.preventDefault();
       const textarea = textareaRef.current;

@@ -20,6 +20,7 @@ interface DocumentPreviewProps {
   onMarkdownBodyChange: (newBody: string) => void;
   assets: ProjectAsset[];
   customCss?: string;
+  onSaveShortcut?: () => void;
 }
 
 export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
@@ -29,6 +30,7 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   onMarkdownBodyChange,
   assets,
   customCss = '',
+  onSaveShortcut,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const isTypingInsideIframe = useRef(false);
@@ -218,7 +220,16 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     if (header) {
       doc.documentElement.style.setProperty('--header-h', `${header.offsetHeight + 10}px`);
     }
-  }, [directEditEnabled, frontmatter, onFrontmatterChange, onMarkdownBodyChange, assets]);
+
+    // 7. Handle Ctrl+S / Cmd+S inside iframe
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        onSaveShortcut?.();
+      }
+    };
+    doc.addEventListener('keydown', handleKeyDown);
+  }, [directEditEnabled, frontmatter, onFrontmatterChange, onMarkdownBodyChange, assets, onSaveShortcut]);
 
   // Open standalone HTML in new window/tab
   const handleOpenNewWindow = () => {

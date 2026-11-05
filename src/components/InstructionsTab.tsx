@@ -265,6 +265,17 @@ export const InstructionsTab: React.FC<InstructionsTabProps> = ({
           </p>
         </div>
 
+        {/* 7. Save & Local Storage Shortcut */}
+        <div className="bg-neutral-950 border border-neutral-700 rounded-lg p-5">
+          <h3 className="text-sm font-bold text-white uppercase font-mono mb-2 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-white" />
+            <span>Save Shortcut (Ctrl+S / Cmd+S)</span>
+          </h3>
+          <p className="text-xs text-neutral-300 leading-relaxed">
+            Press <code className="bg-neutral-800 text-white px-1.5 py-0.5 rounded font-mono text-[11px]">Ctrl+S</code> (or <code className="bg-neutral-800 text-white px-1.5 py-0.5 rounded font-mono text-[11px]">Cmd+S</code> on Mac) anywhere in the editor or preview to instantly persist your document to browser local storage and export your portable submission ZIP package (<code className="text-white font-mono">report.md</code>, <code className="text-white font-mono">index.html</code>, and <code className="text-white font-mono">images/</code>).
+          </p>
+        </div>
+
       </div>
     </div>
   );

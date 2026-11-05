@@ -9,7 +9,7 @@ export interface Frontmatter {
   follows: string;
   tldr: string;
   tests_total: number | string;
-  qa_verdict: string;
+  qa_verdict?: string;
   [key: string]: any;
 }
 
@@ -23,5 +23,5 @@ export interface ProjectAsset {
   addedAt: number;
 }
 
-export type ViewMode = 'split' | 'editor' | 'preview' | 'html';
+export type ViewMode = 'split' | 'preview' | 'html';
 export type ActiveTab = 'writer' | 'css' | 'instructions';

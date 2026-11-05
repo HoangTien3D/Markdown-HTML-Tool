@@ -239,16 +239,6 @@ export default function App() {
               </div>
             )}
 
-            {viewMode === 'editor' && (
-              <MarkdownEditor
-                value={rawMarkdown}
-                onChange={setRawMarkdown}
-                onDropFiles={handleAddFiles}
-                assets={assets}
-                onOpenMediaManager={() => setMediaManagerOpen(true)}
-              />
-            )}
-
             {viewMode === 'preview' && (
               <DocumentPreview
                 frontmatter={frontmatter}

@@ -3,7 +3,7 @@ import { ProjectAsset } from '../types';
 export const INITIAL_MARKDOWN = `---
 title: "Assignment 1"
 date: 2026-07-12 14:32:00
-project: COMM 2754 A1 S4105596 TIEN HOANG
+project: Design Document
 project_dir: /home/you/projects/your-project
 report_number: 1
 subject: "Design document of Assignment"
@@ -11,7 +11,6 @@ operator: "A Great Student"
 follows: report-000
 tldr: "This is a live example. Edit the Markdown on the left and the report regenerates on the right. The frontmatter block carries the metadata (title, date, project, and so on); the body uses a small, fixed set of headings. Everything you see here, the sticky header, the contents sidebar, the typed blocks, comes from the same engine the command-line tool uses, so what you preview is exactly what gets saved."
 tests_total: 3
-qa_verdict: PASS
 ---
 
 # Prompt
@@ -182,7 +181,8 @@ Interactive auditory cues provide subtle tactile feedback without distracting fr
 
 - Frontmatter adheres strictly to the upstream report schema [VERIFIED]
 - Top-level fixed sections (# Prompt, # Content, # Files Touched, etc.) aligned [VERIFIED]
-- Verdict PASS
+
+Verdict: [PASS]
 
 # Lesson
 

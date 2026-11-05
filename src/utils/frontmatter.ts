@@ -3,15 +3,14 @@ import { Frontmatter } from '../types';
 export const DEFAULT_FRONTMATTER: Frontmatter = {
   title: "Assignment 1",
   date: "2026-07-12 14:32:00",
-  project: "COMM 2754 A1 S-ID Your Name Here",
+  project: "Design Document",
   project_dir: "/home/you/projects/your-project",
   report_number: 1,
   subject: "Design document of Assignment",
   operator: "A Great Student",
   follows: "report-000",
   tldr: "This is a live example. Edit the Markdown on the left and the report regenerates on the right. The frontmatter block carries the metadata (title, date, project, and so on); the body uses a small, fixed set of headings.",
-  tests_total: 3,
-  qa_verdict: "PASS"
+  tests_total: 3
 };
 
 /**

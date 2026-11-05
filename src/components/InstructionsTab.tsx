@@ -131,7 +131,7 @@ export const InstructionsTab: React.FC<InstructionsTabProps> = ({
             <div className="text-neutral-600">---</div>
             <div><span className="text-white font-bold">title</span>: "Assignment 1"</div>
             <div><span className="text-white font-bold">date</span>: 2026-07-12 14:32:00</div>
-            <div><span className="text-white font-bold">project</span>: COMM 2754 A1 S4105596 TIEN HOANG</div>
+            <div><span className="text-white font-bold">project</span>: Design Document</div>
             <div><span className="text-white font-bold">project_dir</span>: /home/you/projects/your-project</div>
             <div><span className="text-white font-bold">report_number</span>: 1</div>
             <div><span className="text-white font-bold">subject</span>: "Design document of Assignment"</div>
@@ -139,14 +139,13 @@ export const InstructionsTab: React.FC<InstructionsTabProps> = ({
             <div><span className="text-white font-bold">follows</span>: report-000</div>
             <div><span className="text-white font-bold">tldr</span>: "This is a live example. Edit the Markdown on the left..."</div>
             <div><span className="text-white font-bold">tests_total</span>: 3</div>
-            <div><span className="text-white font-bold">qa_verdict</span>: PASS</div>
             <div className="text-neutral-600">---</div>
           </div>
 
           <div className="bg-neutral-950 border border-neutral-800 p-4 rounded-lg text-xs text-neutral-300 space-y-1.5">
-            <div>&bull; <strong className="text-white font-mono">Quoting Rules:</strong> <code className="text-white font-mono">title</code>, <code className="text-white font-mono">subject</code>, <code className="text-white font-mono">operator</code>, and <code className="text-white font-mono">tldr</code> must be double-quoted. Fields like <code className="text-white font-mono">date</code>, <code className="text-white font-mono">project</code>, <code className="text-white font-mono">project_dir</code>, <code className="text-white font-mono">follows</code>, and <code className="text-white font-mono">qa_verdict</code> must NEVER be quoted so command-line parsers match them directly.</div>
+            <div>&bull; <strong className="text-white font-mono">Quoting Rules:</strong> <code className="text-white font-mono">title</code>, <code className="text-white font-mono">subject</code>, <code className="text-white font-mono">operator</code>, and <code className="text-white font-mono">tldr</code> must be double-quoted. Fields like <code className="text-white font-mono">date</code>, <code className="text-white font-mono">project</code>, <code className="text-white font-mono">project_dir</code>, <code className="text-white font-mono">follows</code>, and <code className="text-white font-mono">tests_total</code> must NEVER be quoted so command-line parsers match them directly.</div>
             <div>&bull; <strong className="text-white font-mono">Fixed Dialect Sections:</strong> The upstream engine expects fixed top-level headings (<code className="text-white font-mono"># Prompt</code>, <code className="text-white font-mono"># Content</code>, <code className="text-white font-mono"># Files Touched</code>, <code className="text-white font-mono"># Files Not Touched</code>, <code className="text-white font-mono"># Tests</code>, <code className="text-white font-mono"># QA</code>, <code className="text-white font-mono"># Lesson</code>). Your custom design document sections (Abstract, Problem Definition, Ideation, etc.) belong inside <code className="text-white font-mono"># Content</code> as numbered <code className="text-white font-mono">## N. Section</code> headings.</div>
-            <div>&bull; <strong className="text-white font-mono">qa_verdict:</strong> Set to <code className="text-white font-mono">PASS</code>, <code className="text-white font-mono">FAIL</code>, or <code className="text-white font-mono">PENDING</code> for colored semantic indicator.</div>
+            <div>&bull; <strong className="text-white font-mono">QA Verdict:</strong> The QA verdict is located directly at the end of the <code className="text-white font-mono"># QA</code> section (e.g. <code className="text-white font-mono">Verdict: [PASS]</code>), keeping the frontmatter header clean.</div>
             <div>&bull; <strong className="text-white font-mono">Import &amp; Export:</strong> Use the <strong>Import .md</strong> button or drag-and-drop any <code className="text-white font-mono">.md</code> file into the app anytime to view and edit it.</div>
           </div>
         </div>

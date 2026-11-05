@@ -224,19 +224,30 @@ export const FrontmatterEditor: React.FC<FrontmatterEditorProps> = ({
           />
         </div>
 
-        {/* QA Verdict with Monochrome High Contrast Buttons */}
+        {/* QA Verdict (Optional - usually placed in document body # QA) */}
         <div>
-          <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
-            qa_verdict
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[11px] font-mono uppercase text-neutral-400">
+              qa_verdict (Optional)
+            </label>
+            {frontmatter.qa_verdict && (
+              <button
+                type="button"
+                onClick={() => updateField('qa_verdict', undefined)}
+                className="text-[10px] text-neutral-400 hover:text-white underline font-mono cursor-pointer"
+              >
+                Clear
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-3 gap-1.5">
             {(['PASS', 'FAIL', 'PENDING'] as const).map((status) => {
-              const active = String(frontmatter.qa_verdict).toUpperCase() === status;
+              const active = String(frontmatter.qa_verdict || '').toUpperCase() === status;
               return (
                 <button
                   key={status}
                   type="button"
-                  onClick={() => updateField('qa_verdict', status)}
+                  onClick={() => updateField('qa_verdict', active ? undefined : status)}
                   className={`py-1.5 px-2 rounded text-[11px] font-mono font-bold border transition-colors cursor-pointer ${
                     active
                       ? 'bg-white text-black border-white shadow-sm'
@@ -248,6 +259,9 @@ export const FrontmatterEditor: React.FC<FrontmatterEditorProps> = ({
               );
             })}
           </div>
+          <p className="text-[10px] text-neutral-500 mt-1 font-sans">
+            Recommended: Placed at the end of the # QA section in the document body.
+          </p>
         </div>
 
         {/* TL;DR */}

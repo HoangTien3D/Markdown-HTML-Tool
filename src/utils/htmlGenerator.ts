@@ -61,17 +61,17 @@ export function generateStandaloneHtml(
 
   const parsedBody = marked.parse(markdownBody, { renderer, gfm: true }) as string;
 
-  // Replace status tokens [DONE], [FIXED], [VERIFIED], [PENDING], [BROKEN]
+  // Replace status tokens [DONE], [FIXED], [VERIFIED], [PENDING], [BROKEN], [PASS], [FAIL]
   const enhancedBody = parsedBody.replace(
-    /\[(DONE|FIXED|VERIFIED|PENDING|BROKEN)\]/g,
+    /\[(DONE|FIXED|VERIFIED|PENDING|BROKEN|PASS|FAIL)\]/gi,
     (_match: string, token: string) => {
-      const lower = token.toLowerCase();
-      const statusClass = (lower === 'done' || lower === 'fixed' || lower === 'verified')
+      const upper = token.toUpperCase();
+      const statusClass = (upper === 'DONE' || upper === 'FIXED' || upper === 'VERIFIED' || upper === 'PASS')
         ? 'verified'
-        : (lower === 'broken')
+        : (upper === 'BROKEN' || upper === 'FAIL')
           ? 'incorrect'
           : 'pending';
-      return `<span class="status ${statusClass}">${token}</span>`;
+      return `<span class="status ${statusClass}">${upper}</span>`;
     }
   );
 

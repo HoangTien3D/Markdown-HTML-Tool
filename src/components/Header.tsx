@@ -4,7 +4,6 @@ import {
   Download, 
   HelpCircle, 
   Columns, 
-  Edit3, 
   Eye, 
   Code, 
   Sliders, 
@@ -74,35 +73,17 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const verdict = String(frontmatter.qa_verdict || '').toUpperCase();
   const hasCustomCss = customCss.trim().length > 0;
 
   return (
     <header className="h-14 bg-black border-b border-neutral-800 text-white px-4 flex items-center justify-between gap-3 shrink-0 select-none">
-      {/* Brand & Tab Navigation */}
+      {/* Tab Navigation */}
       <div className="flex items-center gap-4">
-        {/* Clean Typographic App Name (No DD logo) */}
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-sm tracking-tight text-white uppercase font-mono">
-              Simple DesDoc
-            </span>
-            {verdict && (
-              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-white/60 bg-neutral-900 text-white">
-                {verdict}
-              </span>
-            )}
-          </div>
-          <p className="text-[10px] text-neutral-400 font-mono truncate max-w-[200px]">
-            {frontmatter.project || 'Design Document'}
-          </p>
-        </div>
-
         {/* Tab Switcher: High Contrast Black & White */}
         <div className="flex items-center bg-neutral-900 p-0.5 rounded border border-neutral-700">
           <button
             onClick={() => setActiveTab('writer')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
               activeTab === 'writer'
                 ? 'bg-white text-black font-semibold'
                 : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
@@ -114,7 +95,7 @@ export const Header: React.FC<HeaderProps> = ({
           
           <button
             onClick={() => setActiveTab('css')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
               activeTab === 'css'
                 ? 'bg-white text-black font-semibold'
                 : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
@@ -129,7 +110,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setActiveTab('instructions')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
               activeTab === 'instructions'
                 ? 'bg-white text-black font-semibold'
                 : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
@@ -144,12 +125,12 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Center Controls (Only in Writer Mode) */}
       {activeTab === 'writer' && (
         <div className="hidden md:flex items-center gap-2">
-          {/* View Mode Buttons */}
+          {/* View Mode Buttons (Split, Preview, HTML) */}
           <div className="flex items-center bg-neutral-900 p-0.5 rounded border border-neutral-700 text-xs">
             <button
               onClick={() => setViewMode('split')}
               title="Split View (Editor & Live Preview)"
-              className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors cursor-pointer ${
                 viewMode === 'split' ? 'bg-white text-black font-bold' : 'text-neutral-400 hover:text-white'
               }`}
             >
@@ -157,19 +138,9 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Split</span>
             </button>
             <button
-              onClick={() => setViewMode('editor')}
-              title="Editor Only"
-              className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
-                viewMode === 'editor' ? 'bg-white text-black font-bold' : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span>Editor</span>
-            </button>
-            <button
               onClick={() => setViewMode('preview')}
               title="Preview Only (Directly Editable)"
-              className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors cursor-pointer ${
                 viewMode === 'preview' ? 'bg-white text-black font-bold' : 'text-neutral-400 hover:text-white'
               }`}
             >
@@ -179,7 +150,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={() => setViewMode('html')}
               title="Clean HTML View"
-              className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors cursor-pointer ${
                 viewMode === 'html' ? 'bg-white text-black font-bold' : 'text-neutral-400 hover:text-white'
               }`}
             >

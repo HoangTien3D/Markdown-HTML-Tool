@@ -83,25 +83,26 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
       article.contentEditable = directEditEnabled ? 'true' : 'false';
       article.style.outline = 'none';
 
+      let hasInputEdited = false;
+      let lastHtml = article.innerHTML;
+
       const handleInput = () => {
         isTypingInsideIframe.current = true;
-        try {
-          // Re-map data URLs back to relative paths for markdown
-          let html = article.innerHTML;
-          for (const asset of assets) {
-            html = html.split(asset.dataUrl).join(asset.path);
-          }
-          const md = convertHtmlToMarkdown(html);
-          onMarkdownBodyChange(md);
-        } catch (e) {
-          console.warn('Error converting HTML to Markdown:', e);
-        }
+        hasInputEdited = true;
       };
 
       const handleBlur = () => {
         isTypingInsideIframe.current = false;
+        // CRITICAL: Do NOT convert HTML to Markdown if user just clicked, selected, or dragged!
+        if (!hasInputEdited) return;
+        hasInputEdited = false;
+
+        const currentHtml = article.innerHTML;
+        if (currentHtml === lastHtml) return;
+        lastHtml = currentHtml;
+
         try {
-          let html = article.innerHTML;
+          let html = currentHtml;
           for (const asset of assets) {
             html = html.split(asset.dataUrl).join(asset.path);
           }
@@ -121,12 +122,19 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     if (titleEl) {
       titleEl.contentEditable = directEditEnabled ? 'true' : 'false';
       titleEl.style.outline = 'none';
+      let titleEdited = false;
       titleEl.addEventListener('input', () => {
         isTypingInsideIframe.current = true;
-        onFrontmatterChange({ ...frontmatter, title: titleEl.innerText.trim() });
+        titleEdited = true;
       });
       titleEl.addEventListener('blur', () => {
         isTypingInsideIframe.current = false;
+        if (!titleEdited) return;
+        titleEdited = false;
+        const val = titleEl.innerText.trim();
+        if (val !== (frontmatter.title || '')) {
+          onFrontmatterChange({ ...frontmatter, title: val });
+        }
       });
     }
 
@@ -135,12 +143,19 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     if (projectEl) {
       projectEl.contentEditable = directEditEnabled ? 'true' : 'false';
       projectEl.style.outline = 'none';
+      let projectEdited = false;
       projectEl.addEventListener('input', () => {
         isTypingInsideIframe.current = true;
-        onFrontmatterChange({ ...frontmatter, project: projectEl.innerText.trim() });
+        projectEdited = true;
       });
       projectEl.addEventListener('blur', () => {
         isTypingInsideIframe.current = false;
+        if (!projectEdited) return;
+        projectEdited = false;
+        const val = projectEl.innerText.trim();
+        if (val !== (frontmatter.project || '')) {
+          onFrontmatterChange({ ...frontmatter, project: val });
+        }
       });
     }
 
@@ -149,12 +164,19 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     if (cwdCodeEl) {
       cwdCodeEl.contentEditable = directEditEnabled ? 'true' : 'false';
       cwdCodeEl.style.outline = 'none';
+      let cwdEdited = false;
       cwdCodeEl.addEventListener('input', () => {
         isTypingInsideIframe.current = true;
-        onFrontmatterChange({ ...frontmatter, project_dir: cwdCodeEl.innerText.trim() });
+        cwdEdited = true;
       });
       cwdCodeEl.addEventListener('blur', () => {
         isTypingInsideIframe.current = false;
+        if (!cwdEdited) return;
+        cwdEdited = false;
+        const val = cwdCodeEl.innerText.trim();
+        if (val !== (frontmatter.project_dir || '')) {
+          onFrontmatterChange({ ...frontmatter, project_dir: val });
+        }
       });
     }
 
@@ -163,12 +185,19 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     if (tldrP) {
       tldrP.contentEditable = directEditEnabled ? 'true' : 'false';
       tldrP.style.outline = 'none';
+      let tldrEdited = false;
       tldrP.addEventListener('input', () => {
         isTypingInsideIframe.current = true;
-        onFrontmatterChange({ ...frontmatter, tldr: tldrP.innerText.trim() });
+        tldrEdited = true;
       });
       tldrP.addEventListener('blur', () => {
         isTypingInsideIframe.current = false;
+        if (!tldrEdited) return;
+        tldrEdited = false;
+        const val = tldrP.innerText.trim();
+        if (val !== (frontmatter.tldr || '')) {
+          onFrontmatterChange({ ...frontmatter, tldr: val });
+        }
       });
     }
 

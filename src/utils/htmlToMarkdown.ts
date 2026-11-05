@@ -16,6 +16,12 @@ try {
   console.warn('GFM plugin init warning:', e);
 }
 
+// CRITICAL FIX: Turndown by default escapes markdown syntax characters like . after numbers (1\. Abstract),
+// * into \*, _ into \_, brackets, etc. Overriding escape prevents backslashes from multiplying.
+turndownService.escape = function (str: string) {
+  return str;
+};
+
 // Custom rule for figures/images with captions
 turndownService.addRule('docFigure', {
   filter: 'figure',
@@ -39,7 +45,30 @@ turndownService.addRule('headingAnchor', {
   }
 });
 
+// Preserve semantic status badges as [TOKEN]
+turndownService.addRule('statusToken', {
+  filter: function (node) {
+    return (node as HTMLElement).classList?.contains('status') || false;
+  },
+  replacement: function (content) {
+    const text = content.trim().replace(/^\[|\]$/g, '');
+    return text ? `[${text}]` : '';
+  }
+});
+
+/**
+ * Strips runaway backslash escapes caused by browser contentEditable or legacy editors
+ */
+export function cleanRunawayBackslashes(md: string): string {
+  if (!md) return '';
+  return md
+    // Clean numbers followed by backslash-escaped dots (e.g. 1\. or 1\\. -> 1.)
+    .replace(/(\d+)\\+\.\s/g, '$1. ')
+    // Clean escaped asterisks, underscores, code backticks, brackets, hashes (e.g. \*\* -> **)
+    .replace(/\\+(\*|_|`|#|\[|\])/g, '$1');
+}
+
 export function convertHtmlToMarkdown(html: string): string {
-  // Strip out temporary UI helper elements if any
-  return turndownService.turndown(html);
+  const md = turndownService.turndown(html);
+  return cleanRunawayBackslashes(md);
 }

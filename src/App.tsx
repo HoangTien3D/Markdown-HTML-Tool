@@ -17,11 +17,12 @@ import { INITIAL_MARKDOWN, DEFAULT_ASSETS } from './utils/template';
 import { parseDocument, replaceFrontmatterInDoc, stringifyFrontmatter } from './utils/frontmatter';
 import { exportProjectZip, downloadMarkdownFile, downloadHtmlFile } from './utils/exportZip';
 import { USER_EMBEDDED_CSS } from './utils/defaultStyle';
+import { cleanRunawayBackslashes } from './utils/htmlToMarkdown';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('writer');
   const [viewMode, setViewMode] = useState<ViewMode>('split');
-  const [rawMarkdown, setRawMarkdown] = useState<string>(INITIAL_MARKDOWN);
+  const [rawMarkdown, setRawMarkdown] = useState<string>(() => cleanRunawayBackslashes(INITIAL_MARKDOWN));
   const [assets, setAssets] = useState<ProjectAsset[]>(DEFAULT_ASSETS);
   const [customCss, setCustomCss] = useState<string>(USER_EMBEDDED_CSS); // Initialized with user's embedded CSS
   const [frontmatterOpen, setFrontmatterOpen] = useState(false);
@@ -43,7 +44,8 @@ export default function App() {
     setRawMarkdown(prev => {
       const { frontmatter: currentFm } = parseDocument(prev);
       const fmString = stringifyFrontmatter(currentFm);
-      return `${fmString}\n\n${newBody.trim()}`;
+      const cleaned = cleanRunawayBackslashes(newBody.trim());
+      return `${fmString}\n\n${cleaned}`;
     });
   }, []);
 
@@ -122,13 +124,13 @@ export default function App() {
   }, [frontmatter, body, customCss]);
 
   const handleResetTemplate = useCallback(() => {
-    setRawMarkdown(INITIAL_MARKDOWN);
+    setRawMarkdown(cleanRunawayBackslashes(INITIAL_MARKDOWN));
     setAssets(DEFAULT_ASSETS);
   }, []);
 
   const handleImportMd = useCallback((text: string, filename?: string) => {
     if (!text || !text.trim()) return;
-    setRawMarkdown(text);
+    setRawMarkdown(cleanRunawayBackslashes(text));
     setActiveTab('writer');
   }, []);
 

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { Header } from './components/Header';
 import { MarkdownEditor } from './components/MarkdownEditor';
@@ -19,6 +19,7 @@ import { parseDocument, replaceFrontmatterInDoc, stringifyFrontmatter } from './
 import { exportProjectZip, downloadMarkdownFile, downloadHtmlFile } from './utils/exportZip';
 import { USER_EMBEDDED_CSS } from './utils/defaultStyle';
 import { cleanRunawayBackslashes, extractAndCleanBase64Images } from './utils/htmlToMarkdown';
+import { rescaleImage } from './utils/imageRescaler';
 
 const LOCAL_STORAGE_KEY = 'simple_desdoc_project_backup';
 
@@ -95,6 +96,88 @@ export default function App() {
     return USER_EMBEDDED_CSS;
   });
 
+  // Undo / Redo Document History Engine
+  const [history, setHistory] = useState<{ rawMarkdown: string; assets: ProjectAsset[]; customCss: string }[]>(() => [
+    { rawMarkdown, assets, customCss }
+  ]);
+  const [historyIndex, setHistoryIndex] = useState<number>(0);
+  const isHistoryAction = useRef(false);
+  const historyIndexRef = useRef(0);
+  historyIndexRef.current = historyIndex;
+
+  // Push a state snapshot into the history stack
+  const pushHistorySnapshot = useCallback((newMd: string, newAssets: ProjectAsset[], newCss: string) => {
+    if (isHistoryAction.current) return;
+    setHistory(prev => {
+      const curIdx = historyIndexRef.current;
+      const cur = prev[curIdx];
+      if (cur && cur.rawMarkdown === newMd && cur.assets === newAssets && cur.customCss === newCss) {
+        return prev;
+      }
+      const sliced = prev.slice(0, curIdx + 1);
+      const next = [...sliced, { rawMarkdown: newMd, assets: newAssets, customCss: newCss }].slice(-50);
+      const nextIdx = next.length - 1;
+      historyIndexRef.current = nextIdx;
+      setHistoryIndex(nextIdx);
+      return next;
+    });
+  }, []);
+
+  // Debounced auto-snapshot when user edits markdown or CSS
+  useEffect(() => {
+    if (isHistoryAction.current) return;
+    const timer = setTimeout(() => {
+      pushHistorySnapshot(rawMarkdown, assets, customCss);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [rawMarkdown, assets, customCss, pushHistorySnapshot]);
+
+  // Undo: Revert to previous document snapshot
+  const handleUndo = useCallback(() => {
+    const curIdx = historyIndexRef.current;
+    if (curIdx <= 0) return;
+    const targetIdx = curIdx - 1;
+    const snapshot = history[targetIdx];
+    if (!snapshot) return;
+
+    isHistoryAction.current = true;
+    historyIndexRef.current = targetIdx;
+    setHistoryIndex(targetIdx);
+
+    setRawMarkdown(snapshot.rawMarkdown);
+    setAssets(snapshot.assets);
+    setCustomCss(snapshot.customCss);
+
+    setToastMessage('Undo (Ctrl+Z)');
+    setTimeout(() => {
+      isHistoryAction.current = false;
+      setToastMessage(null);
+    }, 1000);
+  }, [history]);
+
+  // Redo: Advance to next document snapshot
+  const handleRedo = useCallback(() => {
+    const curIdx = historyIndexRef.current;
+    if (curIdx >= history.length - 1) return;
+    const targetIdx = curIdx + 1;
+    const snapshot = history[targetIdx];
+    if (!snapshot) return;
+
+    isHistoryAction.current = true;
+    historyIndexRef.current = targetIdx;
+    setHistoryIndex(targetIdx);
+
+    setRawMarkdown(snapshot.rawMarkdown);
+    setAssets(snapshot.assets);
+    setCustomCss(snapshot.customCss);
+
+    setToastMessage('Redo (Ctrl+Y)');
+    setTimeout(() => {
+      isHistoryAction.current = false;
+      setToastMessage(null);
+    }, 1000);
+  }, [history]);
+
   const [frontmatterOpen, setFrontmatterOpen] = useState(false);
   // User requested image tab (media manager) open by default
   const [mediaManagerOpen, setMediaManagerOpen] = useState(true);
@@ -108,8 +191,12 @@ export default function App() {
 
   // Update frontmatter from inspector or directly from preview header
   const handleFrontmatterChange = useCallback((updatedFm: Frontmatter) => {
-    setRawMarkdown(prev => replaceFrontmatterInDoc(prev, updatedFm));
-  }, []);
+    setRawMarkdown(prev => {
+      const updatedMd = replaceFrontmatterInDoc(prev, updatedFm);
+      pushHistorySnapshot(updatedMd, assets, customCss);
+      return updatedMd;
+    });
+  }, [assets, customCss, pushHistorySnapshot]);
 
   // Update markdown body from direct in-place preview editing
   const handleMarkdownBodyChange = useCallback((newBody: string) => {
@@ -119,14 +206,64 @@ export default function App() {
       const cleaned = cleanRunawayBackslashes(newBody.trim());
       // Also catch any base64 image strings that may have slipped in
       const { cleanedMd, newAssets } = extractAndCleanBase64Images(cleaned, assets);
+      let updatedAssets = assets;
       if (newAssets.length > 0) {
-        setAssets(a => [...a, ...newAssets]);
+        updatedAssets = [...assets, ...newAssets];
+        setAssets(updatedAssets);
       }
-      return `${fmString}\n\n${cleanedMd}`;
+      const fullDoc = `${fmString}\n\n${cleanedMd}`;
+      pushHistorySnapshot(fullDoc, updatedAssets, customCss);
+      return fullDoc;
     });
-  }, [assets]);
+  }, [assets, customCss, pushHistorySnapshot]);
 
-  // Process dropped files into assets with short clean names
+  // Update image asset directly after rescaling (keeps markdown, HTML, and CSS untouched)
+  const handleUpdateAsset = useCallback((updatedAsset: ProjectAsset) => {
+    setAssets(prev => {
+      const updatedList = prev.map(a => a.id === updatedAsset.id ? updatedAsset : a);
+      pushHistorySnapshot(rawMarkdown, updatedList, customCss);
+      return updatedList;
+    });
+    const dimText = updatedAsset.width && updatedAsset.height ? ` to ${updatedAsset.width}×${updatedAsset.height}px` : '';
+    setToastMessage(`Rescaled ${updatedAsset.name}${dimText}`);
+    setTimeout(() => setToastMessage(null), 3000);
+  }, [rawMarkdown, customCss, pushHistorySnapshot]);
+
+  // Drag-and-release rescale callback from document preview
+  const handleRescaleImagePixels = useCallback(async (assetId: string, width: number, height: number) => {
+    const asset = assets.find(a => a.id === assetId);
+    if (!asset) return;
+
+    try {
+      const sourceDataUrl = asset.originalDataUrl || asset.dataUrl;
+      const format = asset.type || 'image/png';
+      const result = await rescaleImage(sourceDataUrl, width, height, format, 0.92);
+
+      const updated: ProjectAsset = {
+        ...asset,
+        dataUrl: result.dataUrl,
+        size: result.size,
+        width: result.width,
+        height: result.height,
+        originalDataUrl: asset.originalDataUrl || asset.dataUrl,
+        originalWidth: asset.originalWidth || asset.width || width,
+        originalHeight: asset.originalHeight || asset.height || height,
+        originalSize: asset.originalSize || asset.size,
+      };
+
+      setAssets(prev => {
+        const nextAssets = prev.map(a => a.id === assetId ? updated : a);
+        pushHistorySnapshot(rawMarkdown, nextAssets, customCss);
+        return nextAssets;
+      });
+      setToastMessage(`Rescaled ${asset.name} to ${result.width}×${result.height}px (Undo: Ctrl+Z)`);
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (err) {
+      console.error('Failed to rescale image from preview drag:', err);
+    }
+  }, [assets, rawMarkdown, customCss, pushHistorySnapshot]);
+
+  // Process dropped files into assets with short clean names and dimension metadata
   const handleAddFiles = useCallback((files: File[]) => {
     const totalFiles = files.length;
     if (totalFiles === 0) return;
@@ -149,27 +286,58 @@ export default function App() {
         reader.onload = (e) => {
           const dataUrl = e.target?.result as string;
           if (dataUrl) {
-            newlyAddedAssets.push({
-              id,
-              name: shortName,
-              path,
-              dataUrl,
-              size: file.size,
-              type: file.type || 'image/png',
-              addedAt: Date.now()
-            });
-            snippetsToInsert.push(`\n\n![${shortName}](${path})\n`);
+            const img = new Image();
+            img.onload = () => {
+              const w = img.naturalWidth || 800;
+              const h = img.naturalHeight || 600;
+              newlyAddedAssets.push({
+                id,
+                name: shortName,
+                path,
+                dataUrl,
+                size: file.size,
+                type: file.type || 'image/png',
+                addedAt: Date.now(),
+                width: w,
+                height: h,
+                originalDataUrl: dataUrl,
+                originalWidth: w,
+                originalHeight: h,
+                originalSize: file.size,
+              });
+              snippetsToInsert.push(`\n\n![${shortName}](${path})\n`);
+              checkDone();
+            };
+            img.onerror = () => {
+              newlyAddedAssets.push({
+                id,
+                name: shortName,
+                path,
+                dataUrl,
+                size: file.size,
+                type: file.type || 'image/png',
+                addedAt: Date.now(),
+                originalDataUrl: dataUrl,
+              });
+              snippetsToInsert.push(`\n\n![${shortName}](${path})\n`);
+              checkDone();
+            };
+            img.src = dataUrl;
+          } else {
+            checkDone();
           }
 
-          processedCount++;
-          if (processedCount === totalFiles) {
-            if (newlyAddedAssets.length > 0) {
-              setAssets(curr => [...curr, ...newlyAddedAssets]);
-              setRawMarkdown(currMd => currMd + snippetsToInsert.join(''));
-              // Ensure image tab is open and notify user
-              setMediaManagerOpen(true);
-              setToastMessage(`Added ${newlyAddedAssets.length} image(s) to images/ directory`);
-              setTimeout(() => setToastMessage(null), 3000);
+          function checkDone() {
+            processedCount++;
+            if (processedCount === totalFiles) {
+              if (newlyAddedAssets.length > 0) {
+                setAssets(curr => [...curr, ...newlyAddedAssets]);
+                setRawMarkdown(currMd => currMd + snippetsToInsert.join(''));
+                // Ensure image tab is open and notify user
+                setMediaManagerOpen(true);
+                setToastMessage(`Added ${newlyAddedAssets.length} image(s) to images/ directory`);
+                setTimeout(() => setToastMessage(null), 3000);
+              }
             }
           }
         };
@@ -240,18 +408,47 @@ export default function App() {
     }
   }, [frontmatter, rawMarkdown, assets, customCss, saveToLocalStorage]);
 
-  // Global window listener for Ctrl+S / Cmd+S
+  // Global window listener for Ctrl+S (Save), Ctrl+Z (Undo), Ctrl+Y (Redo)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+      if (!isCtrlOrMeta) return;
+
+      // Save: Ctrl+S / Cmd+S
+      if (e.key.toLowerCase() === 's') {
         e.preventDefault();
         handleSaveProject();
+        return;
+      }
+
+      // Undo: Ctrl+Z / Cmd+Z
+      if (e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else {
+          // If the focused element is not an interactive input/textarea, handleUndo directly
+          const activeEl = document.activeElement;
+          const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+          if (!isInput) {
+            e.preventDefault();
+            handleUndo();
+          }
+        }
+        return;
+      }
+
+      // Redo: Ctrl+Y / Cmd+Y
+      if (e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+        return;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSaveProject]);
+  }, [handleSaveProject, handleUndo, handleRedo]);
 
   const handleDownloadMd = useCallback(() => {
     downloadMarkdownFile(rawMarkdown, frontmatter);
@@ -282,21 +479,64 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 2500);
   }, [customCss, assets, saveToLocalStorage]);
 
-  // Global drag-and-drop listener on page
-  const handleGlobalDragOver = (e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes('Files')) {
+  // Prevent browser from navigating to dropped file anywhere in the window (which causes white screen)
+  useEffect(() => {
+    const handleWinDragOver = (e: DragEvent) => {
       e.preventDefault();
-    }
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    };
+
+    const handleWinDrop = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const files = Array.from(e.dataTransfer.files);
+
+        // Check for Markdown file import (.md or .markdown)
+        const mdFile = files.find(f => f.name.endsWith('.md') || f.name.endsWith('.markdown'));
+        if (mdFile) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const text = event.target?.result as string;
+            if (text) {
+              handleImportMd(text, mdFile.name);
+            }
+          };
+          reader.readAsText(mdFile);
+        }
+
+        // Check for images (by MIME type or file extension)
+        const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name));
+        if (imageFiles.length > 0) {
+          handleAddFiles(imageFiles);
+        }
+      }
+    };
+
+    window.addEventListener('dragover', handleWinDragOver, false);
+    window.addEventListener('drop', handleWinDrop, false);
+    return () => {
+      window.removeEventListener('dragover', handleWinDragOver);
+      window.removeEventListener('drop', handleWinDrop);
+    };
+  }, [handleAddFiles, handleImportMd]);
+
+  // React element drag-and-drop listener on page
+  const handleGlobalDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const handleGlobalDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const files = Array.from(e.dataTransfer.files);
 
       // Check for Markdown file import (.md or .markdown)
       const mdFile = files.find(f => f.name.endsWith('.md') || f.name.endsWith('.markdown'));
       if (mdFile) {
-        e.preventDefault();
         const reader = new FileReader();
         reader.onload = (event) => {
           const text = event.target?.result as string;
@@ -308,9 +548,8 @@ export default function App() {
       }
 
       // Check for images
-      const imageFiles = files.filter(f => f.type.startsWith('image/'));
+      const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name));
       if (imageFiles.length > 0) {
-        e.preventDefault();
         handleAddFiles(imageFiles);
       }
     }
@@ -340,6 +579,10 @@ export default function App() {
         onDownloadHtml={handleDownloadHtml}
         onImportMd={handleImportMd}
         isExporting={isExporting}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={historyIndex > 0}
+        canRedo={historyIndex < history.length - 1}
       />
 
       {/* Main Workspace Area */}
@@ -375,6 +618,8 @@ export default function App() {
                     assets={assets}
                     onOpenMediaManager={() => setMediaManagerOpen(true)}
                     onSaveShortcut={handleSaveProject}
+                    onUndo={handleUndo}
+                    onRedo={handleRedo}
                   />
                 </div>
                 <div className="w-full md:w-1/2 h-1/2 md:h-full flex flex-col">
@@ -387,6 +632,9 @@ export default function App() {
                     customCss={customCss}
                     onSaveShortcut={handleSaveProject}
                     onDropFiles={handleAddFiles}
+                    onRescaleImagePixels={handleRescaleImagePixels}
+                    onUndo={handleUndo}
+                    onRedo={handleRedo}
                   />
                 </div>
               </div>
@@ -402,6 +650,9 @@ export default function App() {
                 customCss={customCss}
                 onSaveShortcut={handleSaveProject}
                 onDropFiles={handleAddFiles}
+                onRescaleImagePixels={handleRescaleImagePixels}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
               />
             )}
 
@@ -422,12 +673,13 @@ export default function App() {
               />
             )}
 
-            {/* Media Manager Drawer */}
+            {/* Media Manager Drawer with Image Rescaling Modal Window */}
             {mediaManagerOpen && (
               <MediaManager
                 assets={assets}
                 onAddAssets={handleAddFiles}
                 onRemoveAsset={handleRemoveAsset}
+                onUpdateAsset={handleUpdateAsset}
                 onInsertMarkdown={handleInsertMarkdown}
                 onClose={() => setMediaManagerOpen(false)}
               />

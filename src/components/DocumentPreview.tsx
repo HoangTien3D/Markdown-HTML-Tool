@@ -22,6 +22,9 @@ interface DocumentPreviewProps {
   customCss?: string;
   onSaveShortcut?: () => void;
   onDropFiles?: (files: File[]) => void;
+  onRescaleImagePixels?: (assetId: string, width: number, height: number) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
@@ -33,10 +36,19 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   customCss = '',
   onSaveShortcut,
   onDropFiles,
+  onRescaleImagePixels,
+  onUndo,
+  onRedo,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const isTypingInsideIframe = useRef(false);
   const [directEditEnabled, setDirectEditEnabled] = useState(true);
+
+  // Preserve scroll position so rescaling or editing never snaps back to the top of the page
+  const savedScrollY = useRef(0);
+  const prevFrontmatterJson = useRef('');
+  const prevMarkdownBody = useRef('');
+  const prevCustomCss = useRef('');
 
   // Asset lookup map: replaces images/xxx with dataUrl for preview inside iframe
   const assetMap = useMemo(() => {
@@ -49,21 +61,12 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     return map;
   }, [assets]);
 
-  // Pre-process markdown body so local images/... resolve to dataUrls in preview
-  const resolvedMarkdownBody = useMemo(() => {
-    let text = markdownBody;
-    for (const [key, dataUrl] of assetMap.entries()) {
-      text = text.split(`(${key})`).join(`(${dataUrl})`);
-    }
-    return text;
-  }, [markdownBody, assetMap]);
-
-  // Generate full HTML string with embedded CSS
+  // Generate full HTML string with embedded CSS and assetMap resolution
   const fullHtml = useMemo(() => {
-    return generateStandaloneHtml(frontmatter, resolvedMarkdownBody, customCss);
-  }, [frontmatter, resolvedMarkdownBody, customCss]);
+    return generateStandaloneHtml(frontmatter, markdownBody, customCss, assetMap);
+  }, [frontmatter, markdownBody, customCss, assetMap]);
 
-  // Sync HTML into iframe without leaking styles to outer app
+  // Sync HTML into iframe without leaking styles to outer app, preserving scroll position!
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
@@ -71,8 +74,42 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     // If user is actively typing in the iframe, don't re-render entire srcdoc to avoid cursor jump
     if (isTypingInsideIframe.current) return;
 
+    // Check if only image assets changed while text, frontmatter, and CSS remained unchanged
+    const currentFmJson = JSON.stringify(frontmatter);
+    const textAndStructureUnchanged = 
+      prevMarkdownBody.current === markdownBody &&
+      prevFrontmatterJson.current === currentFmJson &&
+      prevCustomCss.current === customCss;
+
+    prevMarkdownBody.current = markdownBody;
+    prevFrontmatterJson.current = currentFmJson;
+    prevCustomCss.current = customCss;
+
+    // If only assets changed (e.g. image rescale), update ONLY the specific matching image source in place!
+    if (textAndStructureUnchanged && iframe.contentDocument && iframe.contentDocument.body) {
+      const doc = iframe.contentDocument;
+      const images = doc.querySelectorAll('img');
+      images.forEach(img => {
+        const path = img.getAttribute('data-asset-path') || '';
+        const bareName = path.replace('images/', '');
+        const matched = assets.find(a => (path && (a.path === path || a.name === bareName || a.name === path)));
+        if (matched && img.src !== matched.dataUrl) {
+          img.src = matched.dataUrl;
+        }
+      });
+      return;
+    }
+
+    // Capture current scroll before replacing srcdoc
+    if (iframe.contentWindow) {
+      const currentScroll = iframe.contentWindow.scrollY || iframe.contentDocument?.documentElement.scrollTop || 0;
+      if (currentScroll > 0) {
+        savedScrollY.current = currentScroll;
+      }
+    }
+
     iframe.srcdoc = fullHtml;
-  }, [fullHtml]);
+  }, [fullHtml, frontmatter, markdownBody, customCss, assetMap]);
 
   // Setup event listeners and contentEditable inside the iframe once loaded
   const handleIframeLoad = useCallback(() => {
@@ -223,11 +260,43 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
       doc.documentElement.style.setProperty('--header-h', `${header.offsetHeight + 10}px`);
     }
 
-    // 7. Handle Ctrl+S / Cmd+S inside iframe
+    // Restore saved scroll position so the document never snaps back to the top
+    if (savedScrollY.current > 0) {
+      const y = savedScrollY.current;
+      doc.defaultView?.scrollTo(0, y);
+      doc.documentElement.scrollTop = y;
+      requestAnimationFrame(() => {
+        doc.defaultView?.scrollTo(0, y);
+        doc.documentElement.scrollTop = y;
+      });
+    }
+
+    // Continuously keep savedScrollY updated
+    const handleScroll = () => {
+      if (doc.defaultView) {
+        savedScrollY.current = doc.defaultView.scrollY || doc.documentElement.scrollTop || 0;
+      }
+    };
+    doc.addEventListener('scroll', handleScroll, { passive: true });
+
+    // 7. Handle Ctrl+S (Save), Ctrl+Z (Undo), Ctrl+Y (Redo) inside iframe
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+      if (!isCtrlOrMeta) return;
+
+      if (e.key.toLowerCase() === 's') {
         e.preventDefault();
         onSaveShortcut?.();
+      } else if (e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          onRedo?.();
+        } else {
+          onUndo?.();
+        }
+      } else if (e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        onRedo?.();
       }
     };
     doc.addEventListener('keydown', handleKeyDown);
@@ -242,11 +311,12 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     };
 
     const handleIframeDrop = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
       if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        const imageFiles = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+        const files = Array.from(e.dataTransfer.files);
+        const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name));
         if (imageFiles.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
           onDropFiles?.(imageFiles);
         }
       }
@@ -254,7 +324,8 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
 
     const handleIframePaste = (e: ClipboardEvent) => {
       if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
-        const imageFiles = Array.from(e.clipboardData.files).filter(f => f.type.startsWith('image/'));
+        const files = Array.from(e.clipboardData.files);
+        const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name));
         if (imageFiles.length > 0) {
           e.preventDefault();
           e.stopPropagation();
@@ -265,13 +336,187 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
 
     doc.addEventListener('dragover', handleIframeDragOver);
     doc.addEventListener('drop', handleIframeDrop);
-    doc.addEventListener('paste', handleIframePaste);
+    // 9. Interactive Drag-and-Release Image Rescaling directly on the preview
+    // Does NOT open the modal window; rescales the image asset directly when drag is released!
+    const existingOverlay = doc.getElementById('img-resize-overlay');
+    if (existingOverlay) existingOverlay.remove();
+
+    const overlay = doc.createElement('div');
+    overlay.id = 'img-resize-overlay';
+    overlay.style.position = 'absolute';
+    overlay.style.display = 'none';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.border = '2px solid #2563eb';
+    overlay.style.zIndex = '9999';
+    overlay.style.boxSizing = 'border-box';
+
+    // Resize handle at bottom-right corner
+    const handle = doc.createElement('div');
+    handle.id = 'img-resize-handle';
+    handle.style.position = 'absolute';
+    handle.style.right = '-7px';
+    handle.style.bottom = '-7px';
+    handle.style.width = '14px';
+    handle.style.height = '14px';
+    handle.style.backgroundColor = '#ffffff';
+    handle.style.border = '2px solid #2563eb';
+    handle.style.borderRadius = '3px';
+    handle.style.cursor = 'nwse-resize';
+    handle.style.pointerEvents = 'auto';
+    handle.title = 'Drag and release to rescale image pixels';
+
+    // Live dimension badge
+    const badge = doc.createElement('div');
+    badge.id = 'img-resize-badge';
+    badge.style.position = 'absolute';
+    badge.style.bottom = '-24px';
+    badge.style.right = '0';
+    badge.style.backgroundColor = '#0f172a';
+    badge.style.color = '#ffffff';
+    badge.style.padding = '2px 6px';
+    badge.style.fontSize = '10px';
+    badge.style.fontFamily = 'monospace';
+    badge.style.borderRadius = '3px';
+    badge.style.whiteSpace = 'nowrap';
+    badge.style.pointerEvents = 'none';
+    badge.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3)';
+
+    overlay.appendChild(handle);
+    overlay.appendChild(badge);
+    doc.body.appendChild(overlay);
+
+    let activeImg: HTMLImageElement | null = null;
+
+    const updateOverlayPosition = (img: HTMLImageElement) => {
+      const rect = img.getBoundingClientRect();
+      const scrollX = doc.defaultView?.scrollX || 0;
+      const scrollY = doc.defaultView?.scrollY || 0;
+      overlay.style.left = `${rect.left + scrollX}px`;
+      overlay.style.top = `${rect.top + scrollY}px`;
+      overlay.style.width = `${rect.width}px`;
+      overlay.style.height = `${rect.height}px`;
+      badge.textContent = `${Math.round(rect.width)} × ${Math.round(rect.height)} px`;
+    };
+
+    // Keep overlay in sync with scrolling and window resizing
+    const handleScrollOrResize = () => {
+      if (activeImg && activeImg.isConnected) {
+        updateOverlayPosition(activeImg);
+      } else {
+        overlay.style.display = 'none';
+        activeImg = null;
+      }
+    };
+    doc.addEventListener('scroll', handleScrollOrResize, true);
+    doc.defaultView?.addEventListener('resize', handleScrollOrResize);
+
+    // Dismiss overlay on outside clicks
+    doc.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName !== 'IMG' && target !== handle) {
+        overlay.style.display = 'none';
+        activeImg = null;
+      }
+    });
+
+    // Attach click listeners to all images in article to select them for resizing
     if (article) {
-      article.addEventListener('dragover', handleIframeDragOver);
-      article.addEventListener('drop', handleIframeDrop);
-      article.addEventListener('paste', handleIframePaste);
+      const imgElements = article.querySelectorAll('img');
+      imgElements.forEach(img => {
+        img.style.cursor = 'pointer';
+        img.title = 'Click to activate drag-and-release resize handle';
+        img.addEventListener('click', (e) => {
+          e.stopPropagation();
+          activeImg = img;
+          overlay.style.display = 'block';
+          updateOverlayPosition(img);
+        });
+      });
     }
-  }, [directEditEnabled, frontmatter, onFrontmatterChange, onMarkdownBodyChange, assets, onSaveShortcut, onDropFiles]);
+
+    // Handle interactive drag-and-release scaling
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 0;
+    let startHeight = 0;
+    let aspectRatio = 1;
+    let currentTargetW = 0;
+    let currentTargetH = 0;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !activeImg) return;
+      e.preventDefault();
+
+      const deltaX = e.clientX - startX;
+      const newW = Math.max(50, Math.round(startWidth + deltaX));
+      const newH = Math.max(30, Math.round(newW * aspectRatio));
+
+      currentTargetW = newW;
+      currentTargetH = newH;
+
+      activeImg.style.width = `${newW}px`;
+      activeImg.style.height = `${newH}px`;
+      updateOverlayPosition(activeImg);
+      badge.textContent = `${newW} × ${newH} px (Release to rescale)`;
+    };
+
+    const onMouseUp = () => {
+      if (!isDragging || !activeImg) return;
+      isDragging = false;
+
+      doc.removeEventListener('mousemove', onMouseMove);
+      doc.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+
+      const imgToRescale = activeImg;
+      const targetW = currentTargetW;
+      const targetH = currentTargetH;
+
+      // Remove temporary visual inline styling so the image displays cleanly at its new native pixel resolution
+      imgToRescale.style.width = '';
+      imgToRescale.style.height = '';
+
+      const path = imgToRescale.getAttribute('data-asset-path') || '';
+      const bareName = path.replace('images/', '');
+      const src = imgToRescale.getAttribute('src') || '';
+      const match = assets.find(a => 
+        (path && (a.path === path || a.name === bareName || a.name === path)) ||
+        a.dataUrl === src
+      );
+
+      if (match && targetW > 0 && targetH > 0) {
+        onRescaleImagePixels?.(match.id, targetW, targetH);
+      }
+
+      setTimeout(() => {
+        if (imgToRescale.isConnected) {
+          updateOverlayPosition(imgToRescale);
+        }
+      }, 100);
+    };
+
+    handle.addEventListener('mousedown', (e) => {
+      if (!activeImg) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      isDragging = true;
+      startX = e.clientX;
+      startWidth = activeImg.offsetWidth;
+      startHeight = activeImg.offsetHeight;
+      const natW = activeImg.naturalWidth || startWidth;
+      const natH = activeImg.naturalHeight || startHeight;
+      aspectRatio = natH / (natW || 1);
+      currentTargetW = startWidth;
+      currentTargetH = startHeight;
+
+      doc.addEventListener('mousemove', onMouseMove);
+      doc.addEventListener('mouseup', onMouseUp);
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    });
+  }, [directEditEnabled, frontmatter, onFrontmatterChange, onMarkdownBodyChange, assets, onSaveShortcut, onDropFiles, onRescaleImagePixels, onUndo, onRedo]);
 
   // Open standalone HTML in new window/tab
   const handleOpenNewWindow = () => {
@@ -324,18 +569,18 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
 
       {/* Sandboxed Iframe Container: ZERO Style Leakage & Handled Drop */}
       <div 
-        className="flex-1 w-full h-full relative bg-white"
+        className="flex-1 w-full h-full relative bg-black"
         onDragOver={(e) => {
-          if (e.dataTransfer.types.includes('Files')) {
-            e.preventDefault();
-          }
+          e.preventDefault();
+          e.stopPropagation();
         }}
         onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
           if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const imageFiles = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+            const files = Array.from(e.dataTransfer.files);
+            const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name));
             if (imageFiles.length > 0) {
-              e.preventDefault();
-              e.stopPropagation();
               onDropFiles?.(imageFiles);
             }
           }

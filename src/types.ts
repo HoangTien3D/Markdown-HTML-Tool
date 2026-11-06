@@ -21,6 +21,12 @@ export interface ProjectAsset {
   size: number;
   type: string;
   addedAt: number;
+  width?: number;
+  height?: number;
+  originalDataUrl?: string;
+  originalWidth?: number;
+  originalHeight?: number;
+  originalSize?: number;
 }
 
 export type ViewMode = 'split' | 'preview' | 'html';

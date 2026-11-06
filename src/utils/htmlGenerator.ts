@@ -34,7 +34,8 @@ export function slugify(text: string): string {
 export function generateStandaloneHtml(
   frontmatter: Frontmatter, 
   markdownBody: string,
-  embeddedCss: string = ''
+  embeddedCss: string = '',
+  assetMap?: Map<string, string>
 ): string {
   const renderer: any = new marked.Renderer();
   
@@ -56,7 +57,22 @@ export function generateStandaloneHtml(
   };
 
   renderer.image = function({ href, title, text }: any) {
-    return `<img src="${href}" alt="${text || ''}" title="${title || ''}" />`;
+    let resolvedSrc = href || '';
+    let assetPath = href || '';
+    if (assetMap) {
+      if (assetMap.has(href)) {
+        resolvedSrc = assetMap.get(href) || href;
+      } else if (assetMap.has(`images/${href}`)) {
+        resolvedSrc = assetMap.get(`images/${href}`) || href;
+        assetPath = `images/${href}`;
+      } else if (href.startsWith('images/')) {
+        const bareName = href.replace('images/', '');
+        if (assetMap.has(bareName)) {
+          resolvedSrc = assetMap.get(bareName) || href;
+        }
+      }
+    }
+    return `<img src="${resolvedSrc}" alt="${text || ''}" title="${title || ''}" data-asset-path="${assetPath}" />`;
   };
 
   const parsedBody = marked.parse(markdownBody, { renderer, gfm: true }) as string;

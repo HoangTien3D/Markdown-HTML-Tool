@@ -7,14 +7,17 @@ import {
   Copy, 
   Plus, 
   Check, 
-  FileImage
+  FileImage,
+  Maximize2
 } from 'lucide-react';
 import { ProjectAsset } from '../types';
+import { ImageRescaleModal } from './ImageRescaleModal';
 
 interface MediaManagerProps {
   assets: ProjectAsset[];
   onAddAssets: (files: File[]) => void;
   onRemoveAsset: (id: string) => void;
+  onUpdateAsset: (updatedAsset: ProjectAsset) => void;
   onInsertMarkdown: (snippet: string) => void;
   onClose: () => void;
 }
@@ -23,11 +26,13 @@ export const MediaManager: React.FC<MediaManagerProps> = ({
   assets,
   onAddAssets,
   onRemoveAsset,
+  onUpdateAsset,
   onInsertMarkdown,
   onClose,
 }) => {
   const [dragActive, setDragActive] = React.useState(false);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
+  const [rescalingAsset, setRescalingAsset] = React.useState<ProjectAsset | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleDrag = (e: React.DragEvent) => {
@@ -149,10 +154,16 @@ export const MediaManager: React.FC<MediaManagerProps> = ({
                   <div className="font-mono text-xs text-white truncate" title={asset.name}>
                     {asset.name}
                   </div>
-                  <div className="text-[10px] text-neutral-400 font-mono flex items-center gap-2 mt-0.5">
+                  <div className="text-[10px] text-neutral-400 font-mono flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span>{formatSize(asset.size)}</span>
+                    {asset.width && asset.height && (
+                      <>
+                        <span>&bull;</span>
+                        <span className="text-neutral-300">{asset.width}×{asset.height}px</span>
+                      </>
+                    )}
                     <span>&bull;</span>
-                    <span className="text-white">{asset.path}</span>
+                    <span className="text-white truncate max-w-[110px]" title={asset.path}>{asset.path}</span>
                   </div>
                 </div>
 
@@ -170,11 +181,21 @@ export const MediaManager: React.FC<MediaManagerProps> = ({
               <div className="flex items-center gap-1.5 pt-1 border-t border-neutral-800 text-[11px] font-mono">
                 <button
                   onClick={() => onInsertMarkdown(`![${asset.name}](${asset.path})\n`)}
-                  className="flex-1 py-1 px-2 bg-neutral-900 hover:bg-white hover:text-black border border-neutral-700 text-white rounded flex items-center justify-center gap-1 font-bold transition-colors cursor-pointer"
+                  className="flex-1 py-1 px-1.5 bg-neutral-900 hover:bg-white hover:text-black border border-neutral-700 text-white rounded flex items-center justify-center gap-1 font-bold transition-colors cursor-pointer"
                   title="Insert markdown image syntax"
                 >
                   <Plus className="w-3 h-3" /> Insert
                 </button>
+
+                <button
+                  onClick={() => setRescalingAsset(asset)}
+                  className="py-1 px-2 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-200 hover:text-white rounded flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Rescale image pixel resolution"
+                >
+                  <Maximize2 className="w-3 h-3 text-neutral-300" />
+                  <span className="text-[10px]">Rescale</span>
+                </button>
+
                 <button
                   onClick={() => copyPath(asset)}
                   className="py-1 px-2 bg-black hover:bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-white rounded flex items-center gap-1 transition-colors cursor-pointer"
@@ -197,6 +218,18 @@ export const MediaManager: React.FC<MediaManagerProps> = ({
           ))
         )}
       </div>
+
+      {/* Rescale Modal */}
+      {rescalingAsset && (
+        <ImageRescaleModal
+          asset={rescalingAsset}
+          onSave={(updated) => {
+            onUpdateAsset(updated);
+            setRescalingAsset(null);
+          }}
+          onClose={() => setRescalingAsset(null)}
+        />
+      )}
     </div>
   );
 };

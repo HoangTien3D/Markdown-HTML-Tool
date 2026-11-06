@@ -22,6 +22,8 @@ interface MarkdownEditorProps {
   assets: ProjectAsset[];
   onOpenMediaManager: () => void;
   onSaveShortcut?: () => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 const COMMON_SNIPPETS = [
@@ -42,6 +44,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   assets,
   onOpenMediaManager,
   onSaveShortcut,
+  onUndo,
+  onRedo,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -53,6 +57,15 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       e.preventDefault();
       onSaveShortcut?.();
       return;
+    }
+
+    // Intercept Ctrl+Y / Cmd+Y or Ctrl+Shift+Z / Cmd+Shift+Z for document Redo
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+      if (onRedo) {
+        e.preventDefault();
+        onRedo();
+        return;
+      }
     }
 
     if (e.key === 'Tab') {

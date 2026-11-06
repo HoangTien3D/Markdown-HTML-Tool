@@ -10,7 +10,9 @@ import {
   Image as ImageIcon,
   ChevronDown,
   Palette,
-  Upload
+  Upload,
+  Undo2,
+  Redo2
 } from 'lucide-react';
 import { ViewMode, Frontmatter, ProjectAsset, ActiveTab } from '../types';
 
@@ -31,6 +33,10 @@ interface HeaderProps {
   onDownloadHtml: () => void;
   onImportMd: (content: string, filename?: string) => void;
   isExporting: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -50,6 +56,10 @@ export const Header: React.FC<HeaderProps> = ({
   onDownloadHtml,
   onImportMd,
   isExporting,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
 }) => {
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -156,6 +166,34 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Code className="w-3.5 h-3.5" />
               <span>HTML</span>
+            </button>
+          </div>
+
+          {/* Undo & Redo Toolbar Controls */}
+          <div className="flex items-center bg-neutral-900 p-0.5 rounded border border-neutral-700 text-xs">
+            <button
+              onClick={onUndo}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z)"
+              className={`p-1.5 rounded transition-colors flex items-center gap-1 ${
+                canUndo 
+                  ? 'text-neutral-200 hover:text-white hover:bg-neutral-800 cursor-pointer' 
+                  : 'text-neutral-600 cursor-not-allowed'
+              }`}
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={onRedo}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Y)"
+              className={`p-1.5 rounded transition-colors flex items-center gap-1 ${
+                canRedo 
+                  ? 'text-neutral-200 hover:text-white hover:bg-neutral-800 cursor-pointer' 
+                  : 'text-neutral-600 cursor-not-allowed'
+              }`}
+            >
+              <Redo2 className="w-3.5 h-3.5" />
             </button>
           </div>
 

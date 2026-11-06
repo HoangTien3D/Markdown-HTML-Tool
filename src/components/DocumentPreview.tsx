@@ -21,6 +21,7 @@ interface DocumentPreviewProps {
   assets: ProjectAsset[];
   customCss?: string;
   onSaveShortcut?: () => void;
+  onDropFiles?: (files: File[]) => void;
 }
 
 export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
@@ -31,6 +32,7 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   assets,
   customCss = '',
   onSaveShortcut,
+  onDropFiles,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const isTypingInsideIframe = useRef(false);
@@ -229,7 +231,47 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
       }
     };
     doc.addEventListener('keydown', handleKeyDown);
-  }, [directEditEnabled, frontmatter, onFrontmatterChange, onMarkdownBodyChange, assets, onSaveShortcut]);
+
+    // 8. CRITICAL: Intercept drag-and-drop on preview iframe to prevent browser inserting massive raw base64 data URLs!
+    const handleIframeDragOver = (e: DragEvent) => {
+      if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    };
+
+    const handleIframeDrop = (e: DragEvent) => {
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const imageFiles = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+        if (imageFiles.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          onDropFiles?.(imageFiles);
+        }
+      }
+    };
+
+    const handleIframePaste = (e: ClipboardEvent) => {
+      if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+        const imageFiles = Array.from(e.clipboardData.files).filter(f => f.type.startsWith('image/'));
+        if (imageFiles.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          onDropFiles?.(imageFiles);
+        }
+      }
+    };
+
+    doc.addEventListener('dragover', handleIframeDragOver);
+    doc.addEventListener('drop', handleIframeDrop);
+    doc.addEventListener('paste', handleIframePaste);
+    if (article) {
+      article.addEventListener('dragover', handleIframeDragOver);
+      article.addEventListener('drop', handleIframeDrop);
+      article.addEventListener('paste', handleIframePaste);
+    }
+  }, [directEditEnabled, frontmatter, onFrontmatterChange, onMarkdownBodyChange, assets, onSaveShortcut, onDropFiles]);
 
   // Open standalone HTML in new window/tab
   const handleOpenNewWindow = () => {
@@ -280,8 +322,25 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
         </div>
       </div>
 
-      {/* Sandboxed Iframe Container: ZERO Style Leakage */}
-      <div className="flex-1 w-full h-full relative bg-white">
+      {/* Sandboxed Iframe Container: ZERO Style Leakage & Handled Drop */}
+      <div 
+        className="flex-1 w-full h-full relative bg-white"
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes('Files')) {
+            e.preventDefault();
+          }
+        }}
+        onDrop={(e) => {
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const imageFiles = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+            if (imageFiles.length > 0) {
+              e.preventDefault();
+              e.stopPropagation();
+              onDropFiles?.(imageFiles);
+            }
+          }
+        }}
+      >
         <iframe
           ref={iframeRef}
           id="preview"

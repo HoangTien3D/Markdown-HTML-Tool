@@ -1,6 +1,7 @@
 import TurndownService from 'turndown';
 // @ts-ignore
 import { gfm } from 'turndown-plugin-gfm';
+import { ProjectAsset } from '../types';
 
 const turndownService = new TurndownService({
   headingStyle: 'atx',
@@ -66,6 +67,51 @@ export function cleanRunawayBackslashes(md: string): string {
     .replace(/(\d+)\\+\.\s/g, '$1. ')
     // Clean escaped asterisks, underscores, code backticks, brackets, hashes (e.g. \*\* -> **)
     .replace(/\\+(\*|_|`|#|\[|\])/g, '$1');
+}
+
+/**
+ * Automatically detects and cleans massive raw base64 data URLs in markdown,
+ * converting them into short, portable images/ filenames and extracting the assets.
+ */
+export function extractAndCleanBase64Images(
+  md: string,
+  existingAssets: ProjectAsset[] = []
+): { cleanedMd: string; newAssets: ProjectAsset[] } {
+  if (!md || !md.includes('data:image/')) {
+    return { cleanedMd: md, newAssets: [] };
+  }
+
+  const newAssets: ProjectAsset[] = [];
+  const existingNames = new Set(existingAssets.map(a => a.name));
+  let count = 1;
+
+  const cleanedMd = md.replace(
+    /!\[(.*?)\]\((data:image\/([a-zA-Z0-9+]+);base64,([^\s\)]+))\)/g,
+    (_fullMatch, alt, dataUrl, subtype) => {
+      let ext = subtype === 'jpeg' ? '.jpg' : `.${subtype}`;
+      let shortName = `img_${count}${ext}`;
+      while (existingNames.has(shortName)) {
+        count++;
+        shortName = `img_${count}${ext}`;
+      }
+      existingNames.add(shortName);
+
+      const path = `images/${shortName}`;
+      newAssets.push({
+        id: `${shortName}-${Date.now()}`,
+        name: shortName,
+        path,
+        dataUrl,
+        size: Math.round(dataUrl.length * 0.75),
+        type: `image/${subtype}`,
+        addedAt: Date.now()
+      });
+      count++;
+      return `![${alt || shortName}](${path})`;
+    }
+  );
+
+  return { cleanedMd, newAssets };
 }
 
 export function convertHtmlToMarkdown(html: string): string {

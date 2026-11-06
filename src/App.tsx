@@ -18,10 +18,37 @@ import { INITIAL_MARKDOWN, DEFAULT_ASSETS } from './utils/template';
 import { parseDocument, replaceFrontmatterInDoc, stringifyFrontmatter } from './utils/frontmatter';
 import { exportProjectZip, downloadMarkdownFile, downloadHtmlFile } from './utils/exportZip';
 import { USER_EMBEDDED_CSS } from './utils/defaultStyle';
-import { cleanRunawayBackslashes } from './utils/htmlToMarkdown';
-import { Analytics } from '@vercel/analytics/react';
+import { cleanRunawayBackslashes, extractAndCleanBase64Images } from './utils/htmlToMarkdown';
 
 const LOCAL_STORAGE_KEY = 'simple_desdoc_project_backup';
+
+/**
+ * Generate a short, clean image file name (e.g. img_1.png, shot_1.jpg)
+ */
+function generateShortImageName(originalName: string, existingNames: Set<string>): string {
+  // Extract file extension or default to .png
+  const lastDot = originalName.lastIndexOf('.');
+  const rawExt = lastDot !== -1 ? originalName.slice(lastDot).toLowerCase() : '.png';
+  const ext = rawExt === '.jpeg' ? '.jpg' : rawExt;
+
+  // Clean the base name to alphanumeric, or use 'img' if too long / messy
+  let base = originalName.substring(0, lastDot !== -1 ? lastDot : originalName.length)
+    .replace(/[^a-zA-Z0-9]/g, '_')
+    .toLowerCase();
+
+  // If base name is long, UUID-like, or meaningless, shorten to max 8 chars
+  if (base.length > 10 || /^image\d*$/i.test(base) || /^[0-9a-f_-]{10,}$/i.test(base)) {
+    base = 'img';
+  }
+
+  let candidate = `${base}${ext}`;
+  let counter = 1;
+  while (existingNames.has(candidate)) {
+    candidate = `${base}_${counter}${ext}`;
+    counter++;
+  }
+  return candidate;
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('writer');
@@ -34,7 +61,8 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed.rawMarkdown === 'string' && parsed.rawMarkdown.trim()) {
-          return cleanRunawayBackslashes(parsed.rawMarkdown);
+          const cleaned = cleanRunawayBackslashes(parsed.rawMarkdown);
+          return extractAndCleanBase64Images(cleaned, []).cleanedMd;
         }
       }
     } catch (e) {}
@@ -68,7 +96,8 @@ export default function App() {
   });
 
   const [frontmatterOpen, setFrontmatterOpen] = useState(false);
-  const [mediaManagerOpen, setMediaManagerOpen] = useState(false);
+  // User requested image tab (media manager) open by default
+  const [mediaManagerOpen, setMediaManagerOpen] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -88,53 +117,67 @@ export default function App() {
       const { frontmatter: currentFm } = parseDocument(prev);
       const fmString = stringifyFrontmatter(currentFm);
       const cleaned = cleanRunawayBackslashes(newBody.trim());
-      return `${fmString}\n\n${cleaned}`;
+      // Also catch any base64 image strings that may have slipped in
+      const { cleanedMd, newAssets } = extractAndCleanBase64Images(cleaned, assets);
+      if (newAssets.length > 0) {
+        setAssets(a => [...a, ...newAssets]);
+      }
+      return `${fmString}\n\n${cleanedMd}`;
     });
-  }, []);
+  }, [assets]);
 
-  // Process dropped files into assets
+  // Process dropped files into assets with short clean names
   const handleAddFiles = useCallback((files: File[]) => {
-    const newAssets: ProjectAsset[] = [];
-    const snippetsToInsert: string[] = [];
-
-    let processedCount = 0;
     const totalFiles = files.length;
+    if (totalFiles === 0) return;
 
-    files.forEach(file => {
-      const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = `images/${cleanName}`;
-      const id = `${cleanName}-${Date.now()}`;
+    setAssets(prevAssets => {
+      const existingNames = new Set(prevAssets.map(a => a.name));
+      const newlyAddedAssets: ProjectAsset[] = [];
+      const snippetsToInsert: string[] = [];
 
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = e.target?.result as string;
-        if (dataUrl) {
-          newAssets.push({
-            id,
-            name: cleanName,
-            path,
-            dataUrl,
-            size: file.size,
-            type: file.type,
-            addedAt: Date.now()
-          });
-          snippetsToInsert.push(`\n![${cleanName}](${path})\n`);
-        }
+      let processedCount = 0;
 
-        processedCount++;
-        if (processedCount === totalFiles) {
-          setAssets(prev => {
-            const existingNames = new Set(prev.map(a => a.name));
-            const filteredNew = newAssets.filter(a => !existingNames.has(a.name));
-            return [...prev, ...filteredNew];
-          });
+      files.forEach(file => {
+        // Generate short clean name e.g. shot_1.png or img_1.jpg
+        const shortName = generateShortImageName(file.name, existingNames);
+        existingNames.add(shortName);
+        const path = `images/${shortName}`;
+        const id = `${shortName}-${Date.now()}`;
 
-          // Append markdown image snippet into document
-          setRawMarkdown(prev => prev + snippetsToInsert.join(''));
-        }
-      };
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const dataUrl = e.target?.result as string;
+          if (dataUrl) {
+            newlyAddedAssets.push({
+              id,
+              name: shortName,
+              path,
+              dataUrl,
+              size: file.size,
+              type: file.type || 'image/png',
+              addedAt: Date.now()
+            });
+            snippetsToInsert.push(`\n\n![${shortName}](${path})\n`);
+          }
 
-      reader.readAsDataURL(file);
+          processedCount++;
+          if (processedCount === totalFiles) {
+            if (newlyAddedAssets.length > 0) {
+              setAssets(curr => [...curr, ...newlyAddedAssets]);
+              setRawMarkdown(currMd => currMd + snippetsToInsert.join(''));
+              // Ensure image tab is open and notify user
+              setMediaManagerOpen(true);
+              setToastMessage(`Added ${newlyAddedAssets.length} image(s) to images/ directory`);
+              setTimeout(() => setToastMessage(null), 3000);
+            }
+          }
+        };
+
+        reader.readAsDataURL(file);
+      });
+
+      return prevAssets;
     });
   }, []);
 
@@ -343,6 +386,7 @@ export default function App() {
                     assets={assets}
                     customCss={customCss}
                     onSaveShortcut={handleSaveProject}
+                    onDropFiles={handleAddFiles}
                   />
                 </div>
               </div>
@@ -357,6 +401,7 @@ export default function App() {
                 assets={assets}
                 customCss={customCss}
                 onSaveShortcut={handleSaveProject}
+                onDropFiles={handleAddFiles}
               />
             )}
 
@@ -398,7 +443,6 @@ export default function App() {
           <span>{toastMessage}</span>
         </div>
       )}
-      <Analytics />
     </div>
   );
 }

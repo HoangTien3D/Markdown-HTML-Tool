@@ -19,6 +19,7 @@ import { parseDocument, replaceFrontmatterInDoc, stringifyFrontmatter } from './
 import { exportProjectZip, downloadMarkdownFile, downloadHtmlFile } from './utils/exportZip';
 import { USER_EMBEDDED_CSS } from './utils/defaultStyle';
 import { cleanRunawayBackslashes } from './utils/htmlToMarkdown';
+import { Analytics } from '@vercel/analytics/react';
 
 const LOCAL_STORAGE_KEY = 'simple_desdoc_project_backup';
 
@@ -397,6 +398,7 @@ export default function App() {
           <span>{toastMessage}</span>
         </div>
       )}
+      <Analytics />
     </div>
   );
 }

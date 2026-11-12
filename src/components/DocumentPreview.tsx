@@ -183,7 +183,7 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
       });
     }
 
-    // 3. Make Project Name directly editable inside the iframe header
+    // 3. Make Subtitle / Project Name directly editable inside the iframe header
     const projectEl = doc.querySelector('.header-project') as HTMLElement;
     if (projectEl) {
       projectEl.contentEditable = directEditEnabled ? 'true' : 'false';
@@ -198,8 +198,14 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
         if (!projectEdited) return;
         projectEdited = false;
         const val = projectEl.innerText.trim();
-        if (val !== (frontmatter.project || '')) {
-          onFrontmatterChange({ ...frontmatter, project: val });
+        if (frontmatter.subtitle !== undefined) {
+          if (val !== frontmatter.subtitle) {
+            onFrontmatterChange({ ...frontmatter, subtitle: val });
+          }
+        } else {
+          if (val !== (frontmatter.project || '')) {
+            onFrontmatterChange({ ...frontmatter, project: val });
+          }
         }
       });
     }
@@ -225,23 +231,29 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
       });
     }
 
-    // 5. Make TL;DR directly editable inside the iframe
-    const tldrP = doc.querySelector('.slide p') as HTMLElement;
-    if (tldrP) {
-      tldrP.contentEditable = directEditEnabled ? 'true' : 'false';
-      tldrP.style.outline = 'none';
-      let tldrEdited = false;
-      tldrP.addEventListener('input', () => {
+    // 5. Make Abstract / TL;DR directly editable inside the iframe
+    const abstractP = (doc.querySelector('#abstract p') || doc.querySelector('.slide p')) as HTMLElement;
+    if (abstractP) {
+      abstractP.contentEditable = directEditEnabled ? 'true' : 'false';
+      abstractP.style.outline = 'none';
+      let abstractEdited = false;
+      abstractP.addEventListener('input', () => {
         isTypingInsideIframe.current = true;
-        tldrEdited = true;
+        abstractEdited = true;
       });
-      tldrP.addEventListener('blur', () => {
+      abstractP.addEventListener('blur', () => {
         isTypingInsideIframe.current = false;
-        if (!tldrEdited) return;
-        tldrEdited = false;
-        const val = tldrP.innerText.trim();
-        if (val !== (frontmatter.tldr || '')) {
-          onFrontmatterChange({ ...frontmatter, tldr: val });
+        if (!abstractEdited) return;
+        abstractEdited = false;
+        const val = abstractP.innerText.trim();
+        if (frontmatter.abstract !== undefined) {
+          if (val !== frontmatter.abstract) {
+            onFrontmatterChange({ ...frontmatter, abstract: val });
+          }
+        } else {
+          if (val !== (frontmatter.tldr || '')) {
+            onFrontmatterChange({ ...frontmatter, tldr: val });
+          }
         }
       });
     }

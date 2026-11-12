@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   X, 
   Clock, 
@@ -54,12 +54,18 @@ export const FrontmatterEditor: React.FC<FrontmatterEditorProps> = ({
     onChange(updated);
   };
 
+  const [showLegacy, setShowLegacy] = useState(false);
+
   const standardKeys = [
     'title',
+    'subtitle',
+    'name',
+    'student_number',
     'date',
+    'report_number',
+    'abstract',
     'project',
     'project_dir',
-    'report_number',
     'subject',
     'operator',
     'follows',
@@ -105,70 +111,50 @@ export const FrontmatterEditor: React.FC<FrontmatterEditorProps> = ({
           />
         </div>
 
-        {/* Date with quick button */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-[11px] font-mono uppercase text-neutral-400">
-              date
-            </label>
-            <button
-              onClick={handleSetCurrentDate}
-              className="text-[10px] text-white hover:underline flex items-center gap-1 font-mono cursor-pointer"
-              title="Set to current date and time"
-            >
-              <Clock className="w-3 h-3" /> Now
-            </button>
-          </div>
-          <input
-            type="text"
-            value={frontmatter.date || ''}
-            onChange={(e) => updateField('date', e.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-700 focus:border-white rounded px-2.5 py-1.5 text-white font-mono text-[11px] focus:outline-none"
-            placeholder="YYYY-MM-DD HH:MM:SS"
-          />
-        </div>
-
-        {/* Project & Subject */}
+        {/* Subtitle */}
         <div>
           <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
-            project (Header Eyebrow)
+            subtitle
           </label>
           <input
             type="text"
-            value={frontmatter.project || ''}
-            onChange={(e) => updateField('project', e.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-700 focus:border-white rounded px-2.5 py-1.5 text-white font-mono text-[11px] focus:outline-none"
-            placeholder="Project Name / Unit"
-          />
-        </div>
-
-        <div>
-          <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
-            subject
-          </label>
-          <input
-            type="text"
-            value={frontmatter.subject || ''}
-            onChange={(e) => updateField('subject', e.target.value)}
+            value={frontmatter.subtitle !== undefined ? frontmatter.subtitle : (frontmatter.project || '')}
+            onChange={(e) => updateField('subtitle', e.target.value)}
             className="w-full bg-neutral-950 border border-neutral-700 focus:border-white rounded px-2.5 py-1.5 text-white focus:outline-none"
-            placeholder="Subject of Report"
+            placeholder="A worked example showing every block..."
           />
         </div>
 
-        {/* Operator & Follows */}
+        {/* Name (Author) & Student Number */}
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
-              operator
+              name
             </label>
             <input
               type="text"
-              value={frontmatter.operator || ''}
-              onChange={(e) => updateField('operator', e.target.value)}
+              value={frontmatter.name !== undefined ? frontmatter.name : (frontmatter.operator || '')}
+              onChange={(e) => updateField('name', e.target.value)}
               className="w-full bg-neutral-950 border border-neutral-700 focus:border-white rounded px-2 py-1.5 text-white focus:outline-none"
-              placeholder="Operator"
+              placeholder="A Great Student"
             />
           </div>
+          <div>
+            <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
+              student_number
+            </label>
+            <input
+              type="text"
+              value={frontmatter.student_number || ''}
+              onChange={(e) => updateField('student_number', e.target.value)}
+              className="w-full bg-neutral-950 border border-neutral-700 focus:border-white rounded px-2 py-1.5 text-white font-mono focus:outline-none"
+              placeholder="s1234567"
+            />
+          </div>
+        </div>
+
+        {/* Report Number & Date */}
+        <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
               report_number
@@ -181,101 +167,143 @@ export const FrontmatterEditor: React.FC<FrontmatterEditorProps> = ({
               placeholder="1"
             />
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
-              follows
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] font-mono uppercase text-neutral-400">
+                date
+              </label>
+              <button
+                onClick={handleSetCurrentDate}
+                className="text-[10px] text-white hover:underline flex items-center gap-1 font-mono cursor-pointer"
+                title="Set to current date and time"
+              >
+                <Clock className="w-3 h-3" /> Now
+              </button>
+            </div>
             <input
               type="text"
-              value={frontmatter.follows || ''}
-              onChange={(e) => updateField('follows', e.target.value)}
+              value={frontmatter.date || ''}
+              onChange={(e) => updateField('date', e.target.value)}
               className="w-full bg-neutral-950 border border-neutral-700 focus:border-white rounded px-2 py-1.5 text-white font-mono text-[11px] focus:outline-none"
-              placeholder="report-000"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
-              tests_total
-            </label>
-            <input
-              type="number"
-              value={frontmatter.tests_total ?? 0}
-              onChange={(e) => updateField('tests_total', parseInt(e.target.value, 10) || 0)}
-              className="w-full bg-neutral-950 border border-neutral-700 focus:border-white rounded px-2 py-1.5 text-white font-mono focus:outline-none"
-              placeholder="0"
+              placeholder="2026-11-11 09:00:00"
             />
           </div>
         </div>
 
-        {/* Project Dir */}
+        {/* Abstract */}
         <div>
           <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
-            project_dir (Working Directory)
-          </label>
-          <input
-            type="text"
-            value={frontmatter.project_dir || ''}
-            onChange={(e) => updateField('project_dir', e.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-700 focus:border-white rounded px-2.5 py-1.5 text-white font-mono text-[11px] focus:outline-none"
-            placeholder="/home/you/projects/your-project"
-          />
-        </div>
-
-        {/* QA Verdict (Optional - usually placed in document body # QA) */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-[11px] font-mono uppercase text-neutral-400">
-              qa_verdict (Optional)
-            </label>
-            {frontmatter.qa_verdict && (
-              <button
-                type="button"
-                onClick={() => updateField('qa_verdict', undefined)}
-                className="text-[10px] text-neutral-400 hover:text-white underline font-mono cursor-pointer"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-3 gap-1.5">
-            {(['PASS', 'FAIL', 'PENDING'] as const).map((status) => {
-              const active = String(frontmatter.qa_verdict || '').toUpperCase() === status;
-              return (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => updateField('qa_verdict', active ? undefined : status)}
-                  className={`py-1.5 px-2 rounded text-[11px] font-mono font-bold border transition-colors cursor-pointer ${
-                    active
-                      ? 'bg-white text-black border-white shadow-sm'
-                      : 'bg-neutral-950 text-neutral-400 border-neutral-700 hover:text-white hover:border-neutral-500'
-                  }`}
-                >
-                  {status}
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-[10px] text-neutral-500 mt-1 font-sans">
-            Recommended: Placed at the end of the # QA section in the document body.
-          </p>
-        </div>
-
-        {/* TL;DR */}
-        <div>
-          <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
-            tldr (Executive Overview)
+            abstract (Rendered First Section)
           </label>
           <textarea
             rows={4}
-            value={frontmatter.tldr || ''}
-            onChange={(e) => updateField('tldr', e.target.value)}
+            value={frontmatter.abstract !== undefined ? frontmatter.abstract : (frontmatter.tldr || '')}
+            onChange={(e) => updateField('abstract', e.target.value)}
             className="w-full bg-neutral-950 border border-neutral-700 focus:border-white rounded px-2.5 py-1.5 text-white text-xs leading-relaxed resize-none focus:outline-none font-sans"
-            placeholder="Executive overview text..."
+            placeholder="Three sentences summarizing the document..."
           />
+        </div>
+
+        {/* Collapsible Legacy / Advanced Fields */}
+        <div className="border-t border-neutral-800 pt-2">
+          <button
+            type="button"
+            onClick={() => setShowLegacy(!showLegacy)}
+            className="w-full text-left py-1 text-[11px] font-mono uppercase text-neutral-400 hover:text-white flex items-center justify-between cursor-pointer"
+          >
+            <span>{showLegacy ? 'Hide Secondary Fields' : 'Show Secondary Fields'}</span>
+            <span className="text-neutral-500 text-xs">{showLegacy ? '▲' : '▼'}</span>
+          </button>
+
+          {showLegacy && (
+            <div className="space-y-3 mt-2 pt-2 border-t border-neutral-900">
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-neutral-500 mb-1">
+                  project (Eyebrow Fallback)
+                </label>
+                <input
+                  type="text"
+                  value={frontmatter.project || ''}
+                  onChange={(e) => updateField('project', e.target.value)}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-white text-xs focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-neutral-500 mb-1">
+                  project_dir
+                </label>
+                <input
+                  type="text"
+                  value={frontmatter.project_dir || ''}
+                  onChange={(e) => updateField('project_dir', e.target.value)}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-white font-mono text-[10px] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-neutral-500 mb-1">
+                  subject
+                </label>
+                <input
+                  type="text"
+                  value={frontmatter.subject || ''}
+                  onChange={(e) => updateField('subject', e.target.value)}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-white text-xs focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-neutral-500 mb-1">
+                    follows
+                  </label>
+                  <input
+                    type="text"
+                    value={frontmatter.follows || ''}
+                    onChange={(e) => updateField('follows', e.target.value)}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-white font-mono text-[10px] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-neutral-500 mb-1">
+                    tests_total
+                  </label>
+                  <input
+                    type="number"
+                    value={frontmatter.tests_total ?? ''}
+                    onChange={(e) => updateField('tests_total', parseInt(e.target.value, 10) || 0)}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-white font-mono text-[10px] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-neutral-500 mb-1">
+                  qa_verdict
+                </label>
+                <div className="grid grid-cols-3 gap-1">
+                  {(['PASS', 'FAIL', 'PENDING'] as const).map((status) => {
+                    const active = String(frontmatter.qa_verdict || '').toUpperCase() === status;
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => updateField('qa_verdict', active ? undefined : status)}
+                        className={`py-1 px-1 rounded text-[10px] font-mono font-bold border transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-white text-black border-white'
+                            : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:text-white'
+                        }`}
+                      >
+                        {status}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Custom Metadata Fields */}

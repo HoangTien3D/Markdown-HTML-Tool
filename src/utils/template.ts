@@ -1,196 +1,218 @@
 import { ProjectAsset } from '../types';
 
 export const INITIAL_MARKDOWN = `---
-title: "Assignment 1"
-date: 2026-07-12 14:32:00
-project: Design Document
-project_dir: /home/you/projects/your-project
+title: "Example Design Document: The Markdown Dialect"
+subtitle: "A worked example showing every block the design-document tool understands."
+name: "A Great Student"
+student_number: s1234567
+date: 2026-11-11 09:00:00
 report_number: 1
-subject: "Design document of Assignment"
-operator: "A Great Student"
-follows: report-000
-tldr: "This is a live example. Edit the Markdown on the left and the report regenerates on the right. The frontmatter block carries the metadata (title, date, project, and so on); the body uses a small, fixed set of headings. Everything you see here, the sticky header, the contents sidebar, the typed blocks, comes from the same engine the command-line tool uses, so what you preview is exactly what gets saved."
-tests_total: 3
+abstract: "This is a live example. Edit the Markdown on the left and the document regenerates on the right. The frontmatter block carries the metadata (title, subtitle, your name and student number, the date, and this abstract); the body uses a small, fixed set of top-level headings. Everything you see here, the sticky header, the contents sidebar, the typed blocks, comes from one engine, so what you preview is exactly what gets saved."
 ---
 
 # Prompt
 
-Create a comprehensive design document for Assignment 1 with full technical and aesthetic specifications.
+Design a small tool that turns a Markdown file into a styled design document, and show every kind of block it supports in one example so a reader can copy the shapes they need.
 
 # Content
 
-## 1. Abstract
+## 1. Frontmatter and structure
 
-This design document outlines the comprehensive creative and technical framework for **Assignment 1**. It covers the entire development lifecycle, bridging conceptual inquiry, user empathy, interactive design paradigms, and verifiable software implementations. 
+![A manga panel about loving Markdown](images/markdown-love-manga_261102.png)
 
-The primary objective is to deliver a cohesive interactive system that balances rigorous communication standards with intuitive student engagement.
+The file opens with a YAML frontmatter block between \`---\` fences. It carries \`title\`, \`subtitle\`, \`name\`, \`student_number\`, \`date\`, \`report_number\` and \`abstract\`. The abstract is rendered as the first section of the document and listed in the contents sidebar. Below the frontmatter, top-level \`#\` headings name the fixed sections: \`Content\` (required), and the optional \`Prompt\` and \`Lesson\`.
 
-## 2. Problem Definition
+Inside \`Content\`, a \`## N. Name\` heading opens a numbered section, and typed \`###\` blocks add structure. Inline formatting is familiar: **bold**, *italic*, and \`inline code\` all work.
 
-Traditional design documentation frequently suffers from fragmentation between design mockups, written rationales, and programmatic deliverables:
+### Phase: Typed blocks
 
-- **Information Silos:** Design artifacts remain separated from the living codebase.
-- **Evaluation Friction:** Reviewers and QA testers lack a unified timeline of iterations and verification metrics.
-- **Cognitive Load:** Context-switching between markdown notes, graphic exports, and sound assets delays consensus.
+A \`### Phase:\` block is rendered as a titled panel, good for one stage of a design process: research, sketching, prototyping, evaluation. There are matching \`### Slide:\` blocks for callouts.
 
-### Phase: Target Objectives
-- Provide a single source of truth containing technical metadata, visual guidelines, and interactive proofs.
-- Establish transparent iteration checkpoints with test verdicts.
-- Facilitate modular asset packaging for portable submission.
+### Slide: Design goals
 
-## 3. Target Audience Insights
+- Readable on a phone and on paper
+- No installation and no network
+- One engine for preview and saved output
 
-The design is engineered primarily for academic reviewers, design peers, and software collaborators:
+### Bug: A structured problem record
 
-| Persona | Primary Goal | Pain Points | Desired Outcome |
-| :--- | :--- | :--- | :--- |
-| **Course Assessor** | Fast rubric evaluation & verification | Hunting across multiple folders for assets | Unified sticky metadata, QA badge & clear sections |
-| **Peer Reviewer** | Understanding design rationale & aesthetic decisions | Missing moodboard context & color tokens | Inline visual swatches & structured ideation logs |
-| **Developer Partner**| Implementing interactive components | Unclear asset dimensions and code logic | Clean markdown architecture with syntax blocks |
+- **symptom**: what the user saw go wrong in the prototype
+- **root_cause**: the underlying reason it happened
+- **fix**: what was changed in the design to correct it
+- **rationale**: why that change is the right one
+
+### Table: A comparison
+
+| Block | Written as | Renders as |
+| --- | --- | --- |
+| Numbered section | \`## 1. Name\` | an \`<h2>\` in the sidebar |
+| Phase | \`### Phase: Title\` | a titled panel |
+| Bug | \`### Bug: Title\` | a definition list |
+| Metrics | \`### Metrics\` | a row of badges |
 
 ### Metrics
-- 3 key collaborator personas supported
-- 0 fragmented asset folders
-- 100% portable single-archive bundle
 
-## 4. Ideation
+- 4 fixed top-level sections
+- 1 shared rendering engine
+- 0 external dependencies
 
-During the discovery phase, three distinct design approaches were investigated:
+> Block quotes render as a pulled-aside note. Use them for a single emphasized point, such as a quotation from a user interview.
 
-1. **Option A: Monolithic PDF Report**
-   - *Pros:* Fixed print formatting.
-   - *Cons:* Inflexible on mobile, cannot embed playable audio or interactive code easily.
-2. **Option B: Multi-page Static Site**
-   - *Pros:* High modularity.
-   - *Cons:* Complex overhead for single-milestone assignments.
-3. **Option C: Unified Living Design Document (Selected)**
-   - *Pros:* Markdown-first authoring, reactive HTML preview, portable single-archive export with inline media.
-   - *Cons:* Requires disciplined section hierarchy.
+## 2. Status tokens
 
-> **Selected Direction:** Option C combines the lightweight portability of Markdown with the rich visual power of a standalone HTML report.
+Bracketed all-caps tokens become colored status labels: [DONE], [FIXED], [VERIFIED], [PENDING], [BROKEN]. Use them inline to mark the state of a requirement or a task without breaking the sentence.
 
-## 5. Moodboard
+## 3. Lists and code
 
-The visual atmosphere draws inspiration from clean Swiss typography, technical drafting blueprints, and minimalist laboratory instruments.
+Ordered and nested lists work as in ordinary Markdown:
 
-![Design Studio Moodboard](images/moodboard-preview.svg)
+1. Interview three users.
+2. Sketch two layouts.
+   - A single column for phones
+   - A sidebar for wide screens
+3. Build the prototype.
 
-### Aesthetic Pillars
-- **Technical Rigor:** Crisp geometric borders, subtle monospace accents, and high-contrast typography.
-- **Warm Functionality:** Neutral slate surfaces with deliberate signal accents (Emerald for PASS, Indigo for Primary).
-- **Spatial Rhythm:** Generous breathing room between analytical sections.
+Fenced code blocks keep their indentation and are never interpreted as Markdown:
 
-## 6. Style Guide
-
-### Color Palette
-
-| Token | Hex Value | Usage | Sample |
-| :--- | :--- | :--- | :--- |
-| \`--surface-primary\` | \`#0f172a\` | Sticky Header & Deep Accents | \`Deep Slate\` |
-| \`--brand-accent\` | \`#3b82f6\` | Hyperlinks, Focus States | \`Cobalt Blue\` |
-| \`--verdict-pass\` | \`#10b981\` | QA Badges & Success Verifications | \`Emerald 500\` |
-| \`--text-body\` | \`#334155\` | Primary Reading Body Copy | \`Slate 700\` |
-| \`--border-subtle\` | \`#e2e8f0\` | Table Dividers & Cards | \`Slate 200\` |
-
-### Typography Scale
-- **Document Title / H1:** Inter Display / Semi-Bold 24pt
-- **Section Headings / H2:** Inter / Medium 18pt (Numbered Prefix)
-- **Sub-headings / H3:** Inter / Medium 14pt
-- **Body Text:** Inter / Regular 11pt, 1.6 line height
-- **Code & Metadata:** Fira Code / Mono 10pt
-
-## 7. Iterations
-
-### Phase: Sprint 1 — Architecture & Structural Wireframes
-- Drafted initial frontmatter schema: \`project\`, \`report_number\`, \`qa_verdict\`.
-- Tested baseline Markdown parsing performance.
-
-### Phase: Sprint 2 — Visual Styling & Asset Resolution
-- Integrated sticky technical header with responsive metadata badges.
-- Embedded local \`images/\` relative path resolution for seamless offline viewing.
-
-### Phase: Sprint 3 — Verification & Packaging
-- Validated ZIP packaging containing \`report.md\`, self-contained \`index.html\`, and \`images/\`.
-- Confirmed QA pass with 3 total automated test runs. [DONE]
-
-## 8. Code Explanation
-
-The document generation engine parses the YAML frontmatter block into a typed descriptor and pipes the body through a GitHub-Flavored Markdown renderer with asset rewriting:
-
-\`\`\`typescript
-interface Frontmatter {
-  title: string;
-  project: string;
-  report_number: number;
-  qa_verdict: 'PASS' | 'FAIL' | 'PENDING';
-  tests_total: number;
-}
-
-// Rewrites local images/ relative paths to bundled assets
-function resolveImagePath(src: string, assets: Map<string, string>): string {
-  if (src.startsWith('images/')) {
-    const filename = src.replace('images/', '');
-    return assets.get(filename) || src;
-  }
-  return src;
+\`\`\`javascript
+function area(w, h) {
+  return w * h;
 }
 \`\`\`
 
-All assets in \`images/\` are bundled alongside the markdown file during export, ensuring cross-platform reproducibility without broken remote URLs.
+## 4. Math
 
-## 9. Graphic references
+Inline math such as $E = mc^2$ and display math
 
-Below are the primary graphic references and structural diagrams employed in the design:
+$$
+\\int_0^1 x^2 \\, dx = \\frac{1}{3}
+$$
 
-![System Architecture Reference](images/graphic-reference.svg)
+are typeset with MathJax when the reader is online. A document without math makes no network request.
 
-1. **Figure 1.1:** *Studio Layout & Compositional Grid* — 12-column responsive layout with 320px sticky navigation rail.
-2. **Figure 1.2:** *Type Specimen Sheet* — Contrast ratios verified at 7.2:1 (WCAG AAA compliant).
-3. **Figure 1.3:** *Component Blueprint* — Visual specification for status pills and metadata chips.
+## 5. Links and images
 
-## 10. Sound references
+Standard Markdown links and images work inline. A link: [renickbell.net](https://renickbell.net). An inline image uses \`![alt](src)\` and renders as an \`<img>\` (the src can be a path, a URL, or a data URI):
 
-Interactive auditory cues provide subtle tactile feedback without distracting from documentation readability:
+This line in the Markdown:
 
-- **Track 01:** *Subtle Keystroke & Document Save Cue* (48kHz Stereo, 120ms duration)
-  - Purpose: Confirms asynchronous auto-save state.
-- **Track 02:** *Verification Success Chime* (Sine Wave Harmonics C5-G5, 300ms decay)
-  - Purpose: Triggered upon successful QA test validation.
-- **Track 03:** *Export Complete Notification* (Warm Bell, 400ms duration)
-  - Purpose: Alerts user that \`.zip\` archive has downloaded.
+\`\`\`markdown
+![A yellow flower](images/yellow-flower.jpg)
+\`\`\`
 
-> **Audio Implementation Note:** In web implementations, sound elements are triggered via standard Web Audio API oscillators to avoid external audio dependency bottlenecks.
+renders as:
 
-# Files Touched
-
-- \`report.md\` -- primary markdown living specification
-- \`index.html\` -- compiled standalone HTML report
-- \`images/\` -- local asset directory
-
-# Files Not Touched
-
-- \`report-template.latex\` -- preserved for print PDF generation
-
-# Tests
-
-- Rendered document preview and confirmed all headings and images appear
-- Confirmed TOC sidebar lists every section in order
-- Confirmed saved Markdown and HTML match upstream CLI expectations
-
-# QA
-
-- Frontmatter adheres strictly to the upstream report schema [VERIFIED]
-- Top-level fixed sections (# Prompt, # Content, # Files Touched, etc.) aligned [VERIFIED]
-
-Verdict: [PASS]
+![A yellow flower](images/yellow-flower.jpg)
 
 # Lesson
 
-Structuring design documentation within the exact schema expected by the report engine guarantees seamless round-trips: author in Simple DesDoc, test in the CLI report tool, and share anywhere with zero formatting friction.
+A living example is the best documentation for a small format: the reader edits it, sees the effect immediately, and keeps the parts they need. Write the abstract last, after the design has settled, and keep it to the three sentences a busy reader will actually read.
 `;
 
 // Default starter assets embedded as high quality SVGs converted to Data URLs
 export const DEFAULT_ASSETS: ProjectAsset[] = [
+  {
+    id: 'markdown-love-manga',
+    name: 'markdown-love-manga_261102.png',
+    path: 'images/markdown-love-manga_261102.png',
+    dataUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420">
+        <defs>
+          <pattern id="halftone" width="10" height="10" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.5" fill="#e2e8f0"/>
+          </pattern>
+        </defs>
+        <rect width="800" height="420" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+        <rect x="15" y="15" width="770" height="390" fill="url(#halftone)"/>
+
+        <!-- Manga panels layout -->
+        <g transform="translate(30, 30)">
+          <!-- Left Panel -->
+          <rect x="0" y="0" width="350" height="360" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+          <line x1="0" y1="200" x2="350" y2="200" stroke="#111111" stroke-width="2"/>
+          
+          <!-- Speed lines background in top left -->
+          <line x1="0" y1="0" x2="175" y2="100" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="350" y1="0" x2="175" y2="100" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="0" y1="200" x2="175" y2="100" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="350" y1="200" x2="175" y2="100" stroke="#cbd5e1" stroke-width="1.5"/>
+          
+          <rect x="30" y="40" width="290" height="110" rx="8" fill="#111111"/>
+          <text x="175" y="85" font-family="'Impact', 'Arial Black', sans-serif" font-size="28" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="2">I LOVE MARKDOWN!!</text>
+          <text x="175" y="125" font-family="monospace" font-size="14" fill="#38bdf8" text-anchor="middle"># NO MORE WORD CRASHES</text>
+
+          <g transform="translate(25, 230)">
+            <text x="0" y="25" font-family="monospace" font-size="13" font-weight="bold" fill="#111111">---</text>
+            <text x="0" y="45" font-family="monospace" font-size="13" fill="#0284c7">title: "Design Document"</text>
+            <text x="0" y="65" font-family="monospace" font-size="13" fill="#059669">abstract: "Clean and pure."</text>
+            <text x="0" y="85" font-family="monospace" font-size="13" font-weight="bold" fill="#111111">---</text>
+            <text x="0" y="110" font-family="sans-serif" font-size="12" fill="#64748b">Instant reactive rendering.</text>
+          </g>
+
+          <!-- Right Large Panel -->
+          <rect x="370" y="0" width="370" height="360" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+          <circle cx="555" cy="140" r="85" fill="#f8fafc" stroke="#111111" stroke-width="2.5"/>
+          <!-- Manga eye / expression motif -->
+          <path d="M 500 130 Q 530 110 550 130" stroke="#111111" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <path d="M 560 130 Q 580 110 610 130" stroke="#111111" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <polygon points="555,145 550,158 560,158" fill="#111111"/>
+          <path d="M 525 175 Q 555 200 585 175" stroke="#111111" stroke-width="3" fill="none"/>
+          
+          <!-- Dialogue bubble -->
+          <path d="M 430 250 Q 390 250 390 280 Q 390 310 440 310 L 430 335 L 470 310 Q 550 310 550 280 Q 550 250 430 250" fill="#111111"/>
+          <text x="470" y="278" font-family="sans-serif" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">"What you preview is</text>
+          <text x="470" y="296" font-family="sans-serif" font-size="13" font-weight="bold" fill="#38bdf8" text-anchor="middle">exactly what gets saved!"</text>
+        </g>
+      </svg>
+    `),
+    size: 3200,
+    type: 'image/svg+xml',
+    addedAt: Date.now()
+  },
+  {
+    id: 'yellow-flower',
+    name: 'yellow-flower.jpg',
+    path: 'images/yellow-flower.jpg',
+    dataUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+        <rect width="600" height="400" fill="#fefce8" stroke="#fef08a" stroke-width="2"/>
+        <g transform="translate(300, 200)">
+          <!-- Stem and leaves -->
+          <path d="M 0 50 Q 20 120 -10 180" stroke="#15803d" stroke-width="12" fill="none" stroke-linecap="round"/>
+          <path d="M -5 100 Q -60 90 -80 130 Q -30 140 -5 110" fill="#22c55e" stroke="#166534" stroke-width="2"/>
+          <path d="M 10 120 Q 60 110 85 150 Q 40 160 10 130" fill="#22c55e" stroke="#166534" stroke-width="2"/>
+          
+          <!-- Petals (12 radiating petals) -->
+          <g>
+            <ellipse cx="0" cy="-80" rx="22" ry="55" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+            <ellipse cx="40" cy="-69" rx="22" ry="55" transform="rotate(30 40 -69)" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+            <ellipse cx="69" cy="-40" rx="22" ry="55" transform="rotate(60 69 -40)" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+            <ellipse cx="80" cy="0" rx="22" ry="55" transform="rotate(90 80 0)" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+            <ellipse cx="69" cy="40" rx="22" ry="55" transform="rotate(120 69 40)" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+            <ellipse cx="40" cy="69" rx="22" ry="55" transform="rotate(150 40 69)" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+            <ellipse cx="0" cy="80" rx="22" ry="55" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+            <ellipse cx="-40" cy="69" rx="22" ry="55" transform="rotate(210 -40 69)" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+            <ellipse cx="-69" cy="40" rx="22" ry="55" transform="rotate(240 -69 40)" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+            <ellipse cx="-80" cy="0" rx="22" ry="55" transform="rotate(270 -80 0)" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+            <ellipse cx="-69" cy="-40" rx="22" ry="55" transform="rotate(300 -69 -40)" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+            <ellipse cx="-40" cy="-69" rx="22" ry="55" transform="rotate(330 -40 -69)" fill="#facc15" stroke="#ca8a04" stroke-width="2"/>
+          </g>
+
+          <!-- Center Flower Disc -->
+          <circle cx="0" cy="0" r="45" fill="#713f12" stroke="#451a03" stroke-width="3"/>
+          <circle cx="0" cy="0" r="38" fill="#854d0e"/>
+          <circle cx="-10" cy="-8" r="5" fill="#a16207"/>
+          <circle cx="12" cy="10" r="6" fill="#a16207"/>
+          <circle cx="8" cy="-14" r="5" fill="#a16207"/>
+          <circle cx="-14" cy="12" r="5" fill="#a16207"/>
+        </g>
+        <text x="30" y="375" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#854d0e">Figure: Yellow Flower Specimen</text>
+      </svg>
+    `),
+    size: 2600,
+    type: 'image/svg+xml',
+    addedAt: Date.now()
+  },
   {
     id: 'moodboard-preview',
     name: 'moodboard-preview.svg',
@@ -200,10 +222,7 @@ export const DEFAULT_ASSETS: ProjectAsset[] = [
         <rect width="800" height="380" fill="#f8fafc" rx="8" stroke="#cbd5e1" stroke-width="2"/>
         <text x="30" y="45" font-family="system-ui, sans-serif" font-size="16" font-weight="600" fill="#0f172a">MOODBOARD // CURATED VISUAL ESSENCE</text>
         <text x="30" y="70" font-family="system-ui, sans-serif" font-size="13" fill="#64748b">Modern Technical Aesthetics, Balanced Typography &amp; Functional UI</text>
-        
-        <!-- Grid Items -->
         <g transform="translate(30, 95)">
-          <!-- Box 1: Typography -->
           <rect width="220" height="240" fill="#ffffff" rx="6" stroke="#e2e8f0" stroke-width="1.5"/>
           <rect width="220" height="120" fill="#0f172a" rx="6 6 0 0"/>
           <text x="20" y="65" font-family="monospace" font-size="28" font-weight="700" fill="#ffffff">Aa 24</text>
@@ -211,9 +230,7 @@ export const DEFAULT_ASSETS: ProjectAsset[] = [
           <text x="20" y="150" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#1e293b">Typography Hierarchy</text>
           <text x="20" y="175" font-family="system-ui, sans-serif" font-size="11" fill="#64748b">High legibility mono-type combined with geometric sans-serif.</text>
         </g>
-        
         <g transform="translate(285, 95)">
-          <!-- Box 2: Palette -->
           <rect width="220" height="240" fill="#ffffff" rx="6" stroke="#e2e8f0" stroke-width="1.5"/>
           <g>
             <rect x="15" y="15" width="40" height="85" fill="#0f172a" rx="4"/>
@@ -224,9 +241,7 @@ export const DEFAULT_ASSETS: ProjectAsset[] = [
           <text x="20" y="150" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#1e293b">Chromatic Identity</text>
           <text x="20" y="175" font-family="system-ui, sans-serif" font-size="11" fill="#64748b">Deep slate foundations with vibrant cobalt and green confirmation badges.</text>
         </g>
-        
         <g transform="translate(540, 95)">
-          <!-- Box 3: Minimal Layout -->
           <rect width="230" height="240" fill="#ffffff" rx="6" stroke="#e2e8f0" stroke-width="1.5"/>
           <rect x="20" y="20" width="190" height="18" fill="#e2e8f0" rx="3"/>
           <rect x="20" y="48" width="80" height="12" fill="#3b82f6" rx="3"/>
@@ -251,34 +266,23 @@ export const DEFAULT_ASSETS: ProjectAsset[] = [
         <rect width="800" height="300" fill="#0f172a" rx="8"/>
         <text x="35" y="45" font-family="monospace" font-size="14" fill="#38bdf8">FIG 1.1 // SYSTEM PIPELINE ARCHITECTURE</text>
         <line x1="35" y1="65" x2="765" y2="65" stroke="#334155" stroke-width="1"/>
-        
-        <!-- Node 1 -->
         <rect x="35" y="90" width="200" height="140" fill="#1e293b" rx="6" stroke="#475569" stroke-width="1.5"/>
         <text x="55" y="120" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#f8fafc">1. YAML Frontmatter</text>
-        <text x="55" y="145" font-family="monospace" font-size="11" fill="#94a3b8">title, date, project,</text>
-        <text x="55" y="165" font-family="monospace" font-size="11" fill="#94a3b8">report_number, tldr</text>
+        <text x="55" y="145" font-family="monospace" font-size="11" fill="#94a3b8">title, subtitle, name,</text>
+        <text x="55" y="165" font-family="monospace" font-size="11" fill="#94a3b8">student_number, abstract</text>
         <text x="55" y="195" font-family="system-ui, sans-serif" font-size="10" fill="#38bdf8">&gt; Parsed &amp; Verified</text>
-        
-        <!-- Arrow 1 -->
-        <path d="M 245 160 L 295 160" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
-        
-        <!-- Node 2 -->
+        <path d="M 245 160 L 295 160" stroke="#64748b" stroke-width="2"/>
         <rect x="300" y="90" width="200" height="140" fill="#1e293b" rx="6" stroke="#3b82f6" stroke-width="1.5"/>
         <text x="320" y="120" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#f8fafc">2. Reactive Engine</text>
         <text x="320" y="145" font-family="monospace" font-size="11" fill="#94a3b8">Markdown &amp; HTML</text>
         <text x="320" y="165" font-family="monospace" font-size="11" fill="#94a3b8">Asset Link Resolver</text>
         <text x="320" y="195" font-family="system-ui, sans-serif" font-size="10" fill="#3b82f6">&gt; Live Preview Sync</text>
-        
-        <!-- Arrow 2 -->
         <path d="M 510 160 L 560 160" stroke="#64748b" stroke-width="2"/>
-        
-        <!-- Node 3 -->
         <rect x="565" y="90" width="200" height="140" fill="#1e293b" rx="6" stroke="#10b981" stroke-width="1.5"/>
         <text x="585" y="120" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#f8fafc">3. Standalone ZIP</text>
-        <text x="585" y="145" font-family="monospace" font-size="11" fill="#94a3b8">index.html (styles)</text>
+        <text x="585" y="145" font-family="monospace" font-size="11" fill="#94a3b8">report-001.html</text>
         <text x="585" y="165" font-family="monospace" font-size="11" fill="#94a3b8">report.md + images/</text>
         <text x="585" y="195" font-family="system-ui, sans-serif" font-size="10" fill="#10b981">&gt; 100% Portable Submission</text>
-        
         <text x="35" y="270" font-family="monospace" font-size="11" fill="#64748b">STATUS: COMPILED // SPECIFICATION COMPLIANT // TESTS_TOTAL: 3 (PASS)</text>
       </svg>
     `),

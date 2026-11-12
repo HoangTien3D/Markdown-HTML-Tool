@@ -129,24 +129,21 @@ export const InstructionsTab: React.FC<InstructionsTabProps> = ({
 
           <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-4 font-mono text-xs text-neutral-200 leading-relaxed overflow-x-auto">
             <div className="text-neutral-600">---</div>
-            <div><span className="text-white font-bold">title</span>: "Assignment 1"</div>
-            <div><span className="text-white font-bold">date</span>: 2026-07-12 14:32:00</div>
-            <div><span className="text-white font-bold">project</span>: Design Document</div>
-            <div><span className="text-white font-bold">project_dir</span>: /home/you/projects/your-project</div>
+            <div><span className="text-white font-bold">title</span>: "Example Design Document: The Markdown Dialect"</div>
+            <div><span className="text-white font-bold">subtitle</span>: "A worked example showing every block the design-document tool understands."</div>
+            <div><span className="text-white font-bold">name</span>: "A Great Student"</div>
+            <div><span className="text-white font-bold">student_number</span>: s1234567</div>
+            <div><span className="text-white font-bold">date</span>: 2026-11-11 09:00:00</div>
             <div><span className="text-white font-bold">report_number</span>: 1</div>
-            <div><span className="text-white font-bold">subject</span>: "Design document of Assignment"</div>
-            <div><span className="text-white font-bold">operator</span>: "A Great Student"</div>
-            <div><span className="text-white font-bold">follows</span>: report-000</div>
-            <div><span className="text-white font-bold">tldr</span>: "This is a live example. Edit the Markdown on the left..."</div>
-            <div><span className="text-white font-bold">tests_total</span>: 3</div>
+            <div><span className="text-white font-bold">abstract</span>: "This is a live example. Edit the Markdown on the left..."</div>
             <div className="text-neutral-600">---</div>
           </div>
 
           <div className="bg-neutral-950 border border-neutral-800 p-4 rounded-lg text-xs text-neutral-300 space-y-1.5">
-            <div>&bull; <strong className="text-white font-mono">Quoting Rules:</strong> <code className="text-white font-mono">title</code>, <code className="text-white font-mono">subject</code>, <code className="text-white font-mono">operator</code>, and <code className="text-white font-mono">tldr</code> must be double-quoted. Fields like <code className="text-white font-mono">date</code>, <code className="text-white font-mono">project</code>, <code className="text-white font-mono">project_dir</code>, <code className="text-white font-mono">follows</code>, and <code className="text-white font-mono">tests_total</code> must NEVER be quoted so command-line parsers match them directly.</div>
-            <div>&bull; <strong className="text-white font-mono">Fixed Dialect Sections:</strong> The upstream engine expects fixed top-level headings (<code className="text-white font-mono"># Prompt</code>, <code className="text-white font-mono"># Content</code>, <code className="text-white font-mono"># Files Touched</code>, <code className="text-white font-mono"># Files Not Touched</code>, <code className="text-white font-mono"># Tests</code>, <code className="text-white font-mono"># QA</code>, <code className="text-white font-mono"># Lesson</code>). Your custom design document sections (Abstract, Problem Definition, Ideation, etc.) belong inside <code className="text-white font-mono"># Content</code> as numbered <code className="text-white font-mono">## N. Section</code> headings.</div>
-            <div>&bull; <strong className="text-white font-mono">QA Verdict:</strong> The QA verdict is located directly at the end of the <code className="text-white font-mono"># QA</code> section (e.g. <code className="text-white font-mono">Verdict: [PASS]</code>), keeping the frontmatter header clean.</div>
-            <div>&bull; <strong className="text-white font-mono">Import &amp; Export:</strong> Use the <strong>Import .md</strong> button or drag-and-drop any <code className="text-white font-mono">.md</code> file into the app anytime to view and edit it.</div>
+            <div>&bull; <strong className="text-white font-mono">Quoting Rules:</strong> <code className="text-white font-mono">title</code>, <code className="text-white font-mono">subtitle</code>, <code className="text-white font-mono">name</code>, and <code className="text-white font-mono">abstract</code> must be double-quoted. Metadata like <code className="text-white font-mono">student_number</code>, <code className="text-white font-mono">date</code>, and <code className="text-white font-mono">report_number</code> are unquoted.</div>
+            <div>&bull; <strong className="text-white font-mono">Fixed Dialect Sections:</strong> Top-level <code className="text-white font-mono">#</code> headings name the fixed sections: <code className="text-white font-mono"># Content</code> (required), and the optional <code className="text-white font-mono"># Prompt</code> and <code className="text-white font-mono"># Lesson</code>. Inside <code className="text-white font-mono"># Content</code>, use numbered <code className="text-white font-mono">## N. Section</code> headings and typed blocks (<code className="text-white font-mono">### Phase:</code>, <code className="text-white font-mono">### Slide:</code>, <code className="text-white font-mono">### Bug:</code>, <code className="text-white font-mono">### Metrics</code>).</div>
+            <div>&bull; <strong className="text-white font-mono">Abstract:</strong> The <code className="text-white font-mono">abstract</code> in frontmatter renders as the first section of the document and is listed at the top of the contents sidebar.</div>
+            <div>&bull; <strong className="text-white font-mono">Math Support:</strong> Math blocks like <code className="text-white font-mono">$E = mc^2$</code> and <code className="text-white font-mono">$$...$$</code> are typeset automatically using MathJax.</div>
           </div>
         </div>
 

@@ -1,14 +1,20 @@
 export interface Frontmatter {
   title: string;
+  subtitle?: string;
+  name?: string;
+  student_number?: number | string;
   date: string;
-  project: string;
-  project_dir: string;
   report_number: number | string;
-  subject: string;
-  operator: string;
-  follows: string;
-  tldr: string;
-  tests_total: number | string;
+  abstract?: string;
+
+  // Legacy or alternative fields for backwards compatibility:
+  project?: string;
+  project_dir?: string;
+  subject?: string;
+  operator?: string;
+  follows?: string;
+  tldr?: string;
+  tests_total?: number | string;
   qa_verdict?: string;
   [key: string]: any;
 }

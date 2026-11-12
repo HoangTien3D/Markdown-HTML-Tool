@@ -1,16 +1,13 @@
 import { Frontmatter } from '../types';
 
 export const DEFAULT_FRONTMATTER: Frontmatter = {
-  title: "Assignment 1",
-  date: "2026-07-12 14:32:00",
-  project: "Design Document",
-  project_dir: "/home/you/projects/your-project",
+  title: "Example Design Document: The Markdown Dialect",
+  subtitle: "A worked example showing every block the design-document tool understands.",
+  name: "A Great Student",
+  student_number: "s1234567",
+  date: "2026-11-11 09:00:00",
   report_number: 1,
-  subject: "Design document of Assignment",
-  operator: "A Great Student",
-  follows: "report-000",
-  tldr: "This is a live example. Edit the Markdown on the left and the report regenerates on the right. The frontmatter block carries the metadata (title, date, project, and so on); the body uses a small, fixed set of headings.",
-  tests_total: 3
+  abstract: "This is a live example. Edit the Markdown on the left and the document regenerates on the right. The frontmatter block carries the metadata (title, subtitle, your name and student number, the date, and this abstract); the body uses a small, fixed set of top-level headings. Everything you see here, the sticky header, the contents sidebar, the typed blocks, comes from one engine, so what you preview is exactly what gets saved."
 };
 
 /**
@@ -53,11 +50,16 @@ export function parseDocument(raw: string): { frontmatter: Frontmatter; body: st
     frontmatter[currentKey] = cleanYamlValue(currentValue);
   }
 
+  // Preserve ONLY the actual keys present in the file, with minimal safe fallbacks
+  const resolvedFm: Frontmatter = {
+    title: frontmatter.title !== undefined ? String(frontmatter.title) : DEFAULT_FRONTMATTER.title,
+    date: frontmatter.date !== undefined ? String(frontmatter.date) : DEFAULT_FRONTMATTER.date,
+    report_number: frontmatter.report_number !== undefined ? frontmatter.report_number : 1,
+    ...frontmatter
+  };
+
   return {
-    frontmatter: {
-      ...DEFAULT_FRONTMATTER,
-      ...frontmatter
-    },
+    frontmatter: resolvedFm,
     body
   };
 }
@@ -81,15 +83,20 @@ function cleanYamlValue(val: string): any {
 }
 
 /**
- * Serializes frontmatter into the exact required format of report-core.js
+ * Serializes frontmatter into the exact required format of upstream report / design-doc CLI
  */
 export function stringifyFrontmatter(fm: Frontmatter): string {
+  // Upstream Design Document keys first, followed by legacy/fallback keys only if explicitly present
   const standardKeys = [
     'title',
+    'subtitle',
+    'name',
+    'student_number',
     'date',
+    'report_number',
+    'abstract',
     'project',
     'project_dir',
-    'report_number',
     'subject',
     'operator',
     'follows',
@@ -100,9 +107,9 @@ export function stringifyFrontmatter(fm: Frontmatter): string {
 
   const lines: string[] = ['---'];
 
-  // Render standard keys first in designated order
+  // Render standard keys first in designated order if present
   for (const key of standardKeys) {
-    if (key in fm && (fm as any)[key] !== undefined && (fm as any)[key] !== '') {
+    if (key in fm && (fm as any)[key] !== undefined && (fm as any)[key] !== null && String((fm as any)[key]).trim() !== '') {
       lines.push(formatYamlLine(key, (fm as any)[key]));
     }
   }
@@ -110,7 +117,9 @@ export function stringifyFrontmatter(fm: Frontmatter): string {
   // Render any additional custom keys
   for (const key of Object.keys(fm)) {
     if (!standardKeys.includes(key)) {
-      lines.push(formatYamlLine(key, (fm as any)[key]));
+      if ((fm as any)[key] !== undefined && (fm as any)[key] !== null && String((fm as any)[key]).trim() !== '') {
+        lines.push(formatYamlLine(key, (fm as any)[key]));
+      }
     }
   }
 
@@ -119,9 +128,9 @@ export function stringifyFrontmatter(fm: Frontmatter): string {
 }
 
 /**
- * Formats a YAML key-value pair strictly adhering to the report generator schema:
- * - date, project, project_dir, report_number, follows, tests_total, qa_verdict: NEVER quoted
- * - title, subject, operator, tldr: ALWAYS double-quoted
+ * Formats a YAML key-value pair strictly adhering to upstream schema:
+ * - date, student_number, report_number, project, project_dir, follows, tests_total, qa_verdict: NEVER quoted
+ * - title, subtitle, name, abstract, subject, operator, tldr: ALWAYS double-quoted
  */
 function formatYamlLine(key: string, val: any): string {
   if (typeof val === 'number') {
@@ -129,14 +138,14 @@ function formatYamlLine(key: string, val: any): string {
   }
   const str = String(val ?? '').trim();
 
-  // Strict list of keys that must NEVER be quoted for compatibility with report-core.js / CLI tools
-  if (['date', 'project', 'project_dir', 'report_number', 'follows', 'tests_total', 'qa_verdict'].includes(key)) {
+  // Keys that must NEVER be quoted:
+  if (['date', 'student_number', 'report_number', 'project', 'project_dir', 'follows', 'tests_total', 'qa_verdict'].includes(key)) {
     const unquoted = str.replace(/^["'](.*)["']$/, '$1').trim();
     return `${key}: ${unquoted}`;
   }
 
-  // Keys that must ALWAYS be double-quoted in this dialect
-  if (['title', 'subject', 'operator', 'tldr'].includes(key)) {
+  // Keys that must ALWAYS be double-quoted in this dialect:
+  if (['title', 'subtitle', 'name', 'abstract', 'subject', 'operator', 'tldr'].includes(key)) {
     const unquoted = str.replace(/^["'](.*)["']$/, '$1');
     const escaped = unquoted.replace(/"/g, '\\"');
     return `${key}: "${escaped}"`;

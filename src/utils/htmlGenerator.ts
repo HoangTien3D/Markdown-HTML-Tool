@@ -130,9 +130,16 @@ export function generateStandaloneHtml(
   const paddedNum = formatReportNumber(frontmatter.report_number);
   const displayTitle = paddedNum ? `Report ${paddedNum}: ${cleanedTitle || 'Untitled Document'}` : rawTitle;
 
-  const project = frontmatter.project || '';
+  const subtitle = frontmatter.subtitle || frontmatter.project || '';
+  const authorName = frontmatter.name || frontmatter.operator || '';
+  const studentNum = frontmatter.student_number ? String(frontmatter.student_number) : '';
   const subject = frontmatter.subject || '';
   const dateFormatted = formatReportDate(frontmatter.date);
+
+  const abstractContent = frontmatter.abstract || frontmatter.tldr || '';
+  const abstractLabel = frontmatter.abstract ? 'Abstract' : (frontmatter.tldr ? 'TL;DR' : '');
+
+  const hasMath = markdownBody.includes('$');
 
   const footerText = paddedNum
     ? `${displayTitle} | ${frontmatter.report_number} | Generated ${dateFormatted} | report-${paddedNum}.html`
@@ -143,19 +150,28 @@ export function generateStandaloneHtml(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(displayTitle)}${project ? ` — ${escapeHtml(project)}` : ''}</title>
+  <title>${escapeHtml(displayTitle)}${subtitle ? ` — ${escapeHtml(subtitle)}` : ''}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-${embeddedCss ? `  <style>\n${embeddedCss}\n  </style>\n` : ''}</head>
+${hasMath ? `  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+        displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>\n` : ''}${embeddedCss ? `  <style>\n${embeddedCss}\n  </style>\n` : ''}</head>
 <body>
 
   <!-- Full-width sticky header matching .header -->
   <header class="header">
-    ${project ? `<div class="header-project">${escapeHtml(project)}</div>` : ''}
+    ${subtitle ? `<div class="header-project">${escapeHtml(subtitle)}</div>` : ''}
     <h1 class="header-title">${escapeHtml(displayTitle)}</h1>
     <p class="meta">
       ${frontmatter.report_number !== undefined && frontmatter.report_number !== '' ? `<span>Report #${escapeHtml(String(frontmatter.report_number))}</span>` : ''}
+      ${authorName ? ` &bull; <span>${escapeHtml(authorName)}${studentNum ? ` (${escapeHtml(studentNum)})` : ''}</span>` : (studentNum ? ` &bull; <span>${escapeHtml(studentNum)}</span>` : '')}
       ${subject ? ` &bull; <span>Subject: ${escapeHtml(subject)}</span>` : ''}
       ${verdict ? ` &bull; <span class="${verdictStatusClass}">Verdict: ${escapeHtml(verdict)}</span>` : ''}
       ${frontmatter.tests_total !== undefined ? ` &bull; <span>Tests: ${escapeHtml(String(frontmatter.tests_total))}</span>` : ''}
@@ -166,6 +182,7 @@ ${embeddedCss ? `  <style>\n${embeddedCss}\n  </style>\n` : ''}</head>
   <!-- Table of Contents: fixed in the left gutter matching .toc -->
   <nav class="toc" aria-label="Table of Contents">
     <div class="toc-title">Contents</div>
+    ${abstractContent ? `<a href="#abstract" style="font-weight: 600;">${escapeHtml(abstractLabel)}</a>` : ''}
     ${headings.map(h => {
       const indentStyle = h.level === 2 
         ? 'padding-left: 26px; font-size: 11px;' 
@@ -177,7 +194,8 @@ ${embeddedCss ? `  <style>\n${embeddedCss}\n  </style>\n` : ''}</head>
     
     <hr class="toc-rule">
     <div class="toc-meta">
-      ${frontmatter.operator ? `<div><strong>Operator:</strong> ${escapeHtml(frontmatter.operator)}</div>` : ''}
+      ${authorName ? `<div><strong>Author:</strong> ${escapeHtml(authorName)}</div>` : ''}
+      ${studentNum ? `<div><strong>Student ID:</strong> ${escapeHtml(studentNum)}</div>` : ''}
       ${frontmatter.follows ? `<div><strong>Follows:</strong> ${escapeHtml(frontmatter.follows)}</div>` : ''}
       ${frontmatter.date ? `<div><strong>Date:</strong> ${escapeHtml(frontmatter.date)}</div>` : ''}
     </div>
@@ -185,10 +203,10 @@ ${embeddedCss ? `  <style>\n${embeddedCss}\n  </style>\n` : ''}</head>
 
   <!-- Reading column matching .container -->
   <main class="container">
-    ${frontmatter.tldr ? `
-    <div class="slide">
-      <h3>TL;DR</h3>
-      <p>${escapeHtml(frontmatter.tldr)}</p>
+    ${abstractContent ? `
+    <div id="abstract" class="slide">
+      <h3>${escapeHtml(abstractLabel)}</h3>
+      <p>${escapeHtml(abstractContent)}</p>
     </div>
     ` : ''}
 

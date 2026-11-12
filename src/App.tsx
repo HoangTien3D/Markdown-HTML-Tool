@@ -62,6 +62,10 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed.rawMarkdown === 'string' && parsed.rawMarkdown.trim()) {
+          // If the cached template is the old legacy version, upgrade to upstream design document dialect
+          if (parsed.rawMarkdown.includes('title: "Assignment 1"') && parsed.rawMarkdown.includes('project: Design Document')) {
+            return cleanRunawayBackslashes(INITIAL_MARKDOWN);
+          }
           const cleaned = cleanRunawayBackslashes(parsed.rawMarkdown);
           return extractAndCleanBase64Images(cleaned, []).cleanedMd;
         }
@@ -76,6 +80,10 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && Array.isArray(parsed.assets) && parsed.assets.length > 0) {
+          const hasManga = parsed.assets.some((a: any) => a.name && a.name.includes('markdown-love-manga'));
+          if (!hasManga) {
+            return DEFAULT_ASSETS;
+          }
           return parsed.assets;
         }
       }

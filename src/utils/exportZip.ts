@@ -72,7 +72,8 @@ export async function exportProjectZip(
   const readmeText = `Simple DesDoc — Project Export
 ==============================
 Title: ${frontmatter.title || 'Untitled Document'}
-Project: ${frontmatter.project || 'Design Project'}
+Subtitle: ${frontmatter.subtitle || frontmatter.project || 'Design Document'}
+Author: ${frontmatter.name || frontmatter.operator || 'Student'}
 Date: ${frontmatter.date || new Date().toISOString()}
 
 CONTENTS:

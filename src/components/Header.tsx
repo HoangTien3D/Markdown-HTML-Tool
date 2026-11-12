@@ -112,7 +112,7 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <Palette className="w-3.5 h-3.5" />
-            <span>CSS (style.css)</span>
+            <span>CSS</span>
             {hasCustomCss && (
               <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             )}

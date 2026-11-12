@@ -258,7 +258,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
         {/* Drag Drop Hint */}
         <div className="flex items-center gap-2 text-[11px] text-neutral-400 font-mono">
-          <span className="hidden sm:inline">Drop images into editor</span>
+          <span className="hidden sm:inline"></span>
           <button
             onClick={onOpenMediaManager}
             className="text-white hover:underline font-mono text-[11px]"
@@ -300,7 +300,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           <span>{value.length} characters</span>
         </div>
         <div className="flex items-center gap-2 text-neutral-400">
-          <span>Markdown + YAML Frontmatter</span>
+          <span>easy html creator</span>
         </div>
       </div>
     </div>

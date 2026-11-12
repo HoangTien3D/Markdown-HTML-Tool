@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { Frontmatter, ProjectAsset } from '../types';
-import { generateStandaloneHtml } from './htmlGenerator';
+import { generateStandaloneHtml, formatReportNumber } from './htmlGenerator';
 import { parseDocument, replaceFrontmatterInDoc } from './frontmatter';
 
 /**
@@ -50,6 +50,10 @@ export async function exportProjectZip(
   const { body } = parseDocument(rawMarkdown);
   const standaloneHtml = generateStandaloneHtml(frontmatter, body, customCss);
   zip.file('index.html', standaloneHtml);
+  const paddedNum = formatReportNumber(frontmatter.report_number);
+  if (paddedNum) {
+    zip.file(`report-${paddedNum}.html`, standaloneHtml);
+  }
 
   // 3. Optional style.css
   zip.file('style.css', customCss || '/* style.css */\n');
@@ -125,7 +129,9 @@ export function downloadHtmlFile(frontmatter: Frontmatter, markdownBody: string,
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${(frontmatter.title || 'report').toLowerCase().replace(/\s+/g, '-')}.html`;
+  const paddedNum = formatReportNumber(frontmatter.report_number);
+  const filename = paddedNum ? `report-${paddedNum}.html` : `${(frontmatter.title || 'report').toLowerCase().replace(/\s+/g, '-')}.html`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
 }

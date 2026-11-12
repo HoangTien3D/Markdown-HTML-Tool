@@ -173,8 +173,12 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
         if (!titleEdited) return;
         titleEdited = false;
         const val = titleEl.innerText.trim();
-        if (val !== (frontmatter.title || '')) {
-          onFrontmatterChange({ ...frontmatter, title: val });
+        let cleaned = val;
+        if (frontmatter.report_number !== undefined && frontmatter.report_number !== '') {
+          cleaned = val.replace(/^report\s+\d+:\s*/i, '').trim();
+        }
+        if (cleaned !== (frontmatter.title || '')) {
+          onFrontmatterChange({ ...frontmatter, title: cleaned });
         }
       });
     }
@@ -538,7 +542,7 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
             {directEditEnabled ? 'Preview Editing: Active' : 'Preview: Locked'}
           </span>
           <span className="text-[11px] text-neutral-400 hidden sm:inline font-mono">
-            (Isolated in iframe)
+            (preview editor)
           </span>
         </div>
 

@@ -28,6 +28,29 @@ export function slugify(text: string): string {
     .replace(/\s+/g, '-');
 }
 
+export function formatReportNumber(num: number | string | undefined | null): string {
+  if (num === undefined || num === null) return '';
+  const str = String(num).trim();
+  if (!str) return '';
+  const parsed = parseInt(str, 10);
+  if (!isNaN(parsed)) {
+    return String(parsed).padStart(3, '0');
+  }
+  return str;
+}
+
+export function formatReportDate(dateInput?: string | Date | number): string {
+  if (!dateInput) {
+    const now = new Date();
+    return now.toISOString().replace('T', ' ').substring(0, 19);
+  }
+  const str = String(dateInput).trim();
+  if (str.includes('T')) {
+    return str.replace('T', ' ').replace(/\.\d+Z?$/, '').replace(/Z$/, '');
+  }
+  return str;
+}
+
 /**
  * Generates standalone HTML document with embedded CSS matching the report stylesheet classes
  */
@@ -102,16 +125,25 @@ export function generateStandaloneHtml(
         ? 'status pending' 
         : 'status';
 
-  const title = frontmatter.title || 'Untitled Document';
+  const rawTitle = frontmatter.title || 'Untitled Document';
+  const cleanedTitle = rawTitle.replace(/^report\s+\d+:\s*/i, '').trim();
+  const paddedNum = formatReportNumber(frontmatter.report_number);
+  const displayTitle = paddedNum ? `Report ${paddedNum}: ${cleanedTitle || 'Untitled Document'}` : rawTitle;
+
   const project = frontmatter.project || '';
   const subject = frontmatter.subject || '';
+  const dateFormatted = formatReportDate(frontmatter.date);
+
+  const footerText = paddedNum
+    ? `${displayTitle} | ${frontmatter.report_number} | Generated ${dateFormatted} | report-${paddedNum}.html`
+    : `${displayTitle} | Generated ${dateFormatted}`;
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(title)}${project ? ` — ${escapeHtml(project)}` : ''}</title>
+  <title>${escapeHtml(displayTitle)}${project ? ` — ${escapeHtml(project)}` : ''}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -121,9 +153,9 @@ ${embeddedCss ? `  <style>\n${embeddedCss}\n  </style>\n` : ''}</head>
   <!-- Full-width sticky header matching .header -->
   <header class="header">
     ${project ? `<div class="header-project">${escapeHtml(project)}</div>` : ''}
-    <h1 class="header-title">${escapeHtml(title)}</h1>
+    <h1 class="header-title">${escapeHtml(displayTitle)}</h1>
     <p class="meta">
-      ${frontmatter.report_number ? `<span>Report #${escapeHtml(String(frontmatter.report_number))}</span>` : ''}
+      ${frontmatter.report_number !== undefined && frontmatter.report_number !== '' ? `<span>Report #${escapeHtml(String(frontmatter.report_number))}</span>` : ''}
       ${subject ? ` &bull; <span>Subject: ${escapeHtml(subject)}</span>` : ''}
       ${verdict ? ` &bull; <span class="${verdictStatusClass}">Verdict: ${escapeHtml(verdict)}</span>` : ''}
       ${frontmatter.tests_total !== undefined ? ` &bull; <span>Tests: ${escapeHtml(String(frontmatter.tests_total))}</span>` : ''}
@@ -165,7 +197,7 @@ ${embeddedCss ? `  <style>\n${embeddedCss}\n  </style>\n` : ''}</head>
     </article>
 
     <footer class="footer">
-      <div>Report generated via Simple DesDoc &bull; ${escapeHtml(frontmatter.date || new Date().toISOString())}</div>
+      <div>${escapeHtml(footerText)}</div>
     </footer>
   </main>
 

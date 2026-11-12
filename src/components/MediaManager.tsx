@@ -94,7 +94,7 @@ export const MediaManager: React.FC<MediaManagerProps> = ({
 
       <div className="p-3 border-b border-neutral-800 bg-neutral-950/60">
         <p className="text-[11px] text-neutral-400 leading-snug">
-          Dropped images are bundled into the <code className="text-white font-mono bg-neutral-900 px-1 py-0.5 border border-neutral-700">images/</code> folder during export.
+          Drop images here (automatically packed into .zip)
         </p>
       </div>
 

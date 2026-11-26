@@ -30,9 +30,23 @@ turndownService.addRule('docFigure', {
     const img = (node as HTMLElement).querySelector('img');
     const caption = (node as HTMLElement).querySelector('figcaption');
     if (!img) return content;
-    const src = img.getAttribute('src') || '';
+    const src = img.getAttribute('data-asset-path') || img.getAttribute('src') || '';
     const alt = caption?.textContent?.trim() || img.getAttribute('alt') || '';
     return `\n\n![${alt}](${src})\n\n`;
+  }
+});
+
+// Preserve data-asset-path on standalone img tags so rescaled dataUrls never leak back into Markdown
+turndownService.addRule('preserveAssetPathImg', {
+  filter: 'img',
+  replacement: function (_content, node) {
+    const el = node as HTMLElement;
+    const assetPath = el.getAttribute('data-asset-path');
+    const src = assetPath || el.getAttribute('src') || '';
+    const alt = el.getAttribute('alt') || '';
+    const title = el.getAttribute('title');
+    const titlePart = title ? ` "${title}"` : '';
+    return `![${alt}](${src}${titlePart})`;
   }
 });
 

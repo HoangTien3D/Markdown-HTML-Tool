@@ -50,16 +50,37 @@ export function parseDocument(raw: string): { frontmatter: Frontmatter; body: st
     frontmatter[currentKey] = cleanYamlValue(currentValue);
   }
 
-  // Preserve ONLY the actual keys present in the file, with minimal safe fallbacks
-  const resolvedFm: Frontmatter = {
-    title: frontmatter.title !== undefined ? String(frontmatter.title) : DEFAULT_FRONTMATTER.title,
-    date: frontmatter.date !== undefined ? String(frontmatter.date) : DEFAULT_FRONTMATTER.date,
-    report_number: frontmatter.report_number !== undefined ? frontmatter.report_number : 1,
+  // Preserve ONLY the actual keys present in the file, with minimal safe fallbacks.
+  // Explicitly coerce string-expected fields AFTER spreading ...frontmatter so partial edits like `title: 123` never become non-strings.
+  const merged: Record<string, any> = {
+    title: DEFAULT_FRONTMATTER.title,
+    date: DEFAULT_FRONTMATTER.date,
+    report_number: 1,
     ...frontmatter
   };
 
+  const stringFields = [
+    'title',
+    'subtitle',
+    'name',
+    'date',
+    'abstract',
+    'project',
+    'project_dir',
+    'subject',
+    'operator',
+    'follows',
+    'tldr',
+    'qa_verdict'
+  ];
+  for (const field of stringFields) {
+    if (merged[field] !== undefined && merged[field] !== null) {
+      merged[field] = String(merged[field]);
+    }
+  }
+
   return {
-    frontmatter: resolvedFm,
+    frontmatter: merged as Frontmatter,
     body
   };
 }

@@ -12,7 +12,9 @@ import {
   Palette,
   Upload,
   Undo2,
-  Redo2
+  Redo2,
+  LogOut,
+  Cloud
 } from 'lucide-react';
 import { ViewMode, Frontmatter, ProjectAsset, ActiveTab } from '../types';
 
@@ -37,6 +39,16 @@ interface HeaderProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
+  user?: {
+    uid: string;
+    displayName: string | null;
+    email: string | null;
+    photoURL: string | null;
+  } | null;
+  authLoading?: boolean;
+  isSyncingCloud?: boolean;
+  onGoogleSignIn?: () => void;
+  onSignOut?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -60,6 +72,11 @@ export const Header: React.FC<HeaderProps> = ({
   onRedo,
   canUndo = false,
   canRedo = false,
+  user = null,
+  authLoading = false,
+  isSyncingCloud = false,
+  onGoogleSignIn,
+  onSignOut,
 }) => {
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -317,6 +334,70 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
         </div>
+
+        {/* Google Account Sign-In / Cloud Sync */}
+        <div className="h-5 w-px bg-neutral-800 mx-0.5 hidden sm:block" />
+        {authLoading ? (
+          <div className="px-2.5 py-1.5 rounded border border-neutral-800 bg-neutral-900 text-neutral-400 text-xs flex items-center gap-1.5">
+            <div className="w-3 h-3 border-2 border-neutral-500 border-t-white rounded-full animate-spin" />
+          </div>
+        ) : user ? (
+          <div className="flex items-center gap-1.5 bg-neutral-900 border border-neutral-700 rounded px-2 py-1">
+            {user.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt={user.displayName || user.email || 'Account'}
+                className="w-5 h-5 rounded-full object-cover border border-neutral-600"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-white text-black text-[10px] font-bold flex items-center justify-center">
+                {(user.displayName || user.email || 'U').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <span className="hidden xl:inline text-xs text-neutral-200 max-w-[110px] truncate" title={user.email || user.displayName || ''}>
+              {user.displayName || user.email}
+            </span>
+            {isSyncingCloud && (
+              <span title="Syncing to cloud..." className="inline-flex items-center">
+                <Cloud className="w-3.5 h-3.5 text-neutral-300 animate-pulse" />
+              </span>
+            )}
+            <button
+              onClick={onSignOut}
+              title={`Sign out (${user.email || user.displayName || 'Google'})`}
+              className="p-1 rounded text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onGoogleSignIn}
+            title="Sign in with Google to save uploaded images & documents to the cloud"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-white text-white rounded text-xs font-medium transition-colors cursor-pointer"
+          >
+            <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
+              />
+            </svg>
+            <span className="hidden sm:inline">Sign in</span>
+          </button>
+        )}
       </div>
     </header>
   );

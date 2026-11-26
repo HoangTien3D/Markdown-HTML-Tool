@@ -5,6 +5,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { CheckCircle2 } from 'lucide-react';
+import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
 import { Header } from './components/Header';
 import { MarkdownEditor } from './components/MarkdownEditor';
 import { DocumentPreview } from './components/DocumentPreview';
@@ -20,35 +21,50 @@ import { exportProjectZip, downloadMarkdownFile, downloadHtmlFile } from './util
 import { USER_EMBEDDED_CSS } from './utils/defaultStyle';
 import { cleanRunawayBackslashes, extractAndCleanBase64Images } from './utils/htmlToMarkdown';
 import { rescaleImage } from './utils/imageRescaler';
+import { auth, googleProvider } from './firebase';
+import {
+  loadLocalProjectFromIdb,
+  saveLocalProjectToIdb,
+  clearLocalProjectIdb,
+} from './utils/localDb';
+import {
+  loadCloudProject,
+  saveCloudWorkspace,
+  saveCloudAsset,
+  deleteCloudAsset,
+  syncAllAssetsToCloud,
+  toSafeFirestoreId,
+} from './utils/firebasePersistence';
 
 const LOCAL_STORAGE_KEY = 'simple_desdoc_project_backup';
 
 /**
- * Generate a short, clean image file name (e.g. img_1.png, shot_1.jpg)
+ * Preserve the exact uploaded image file name (only stripping directory paths and characters
+ * that break Markdown links, and adding a suffix only if a file with that name already exists).
  */
-function generateShortImageName(originalName: string, existingNames: Set<string>): string {
-  // Extract file extension or default to .png
-  const lastDot = originalName.lastIndexOf('.');
-  const rawExt = lastDot !== -1 ? originalName.slice(lastDot).toLowerCase() : '.png';
-  const ext = rawExt === '.jpeg' ? '.jpg' : rawExt;
+function preserveUploadedImageName(originalName: string, existingNames: Set<string>): string {
+  const leafName = (originalName || 'image.png').split(/[\\/]/).pop() || 'image.png';
+  const lastDot = leafName.lastIndexOf('.');
+  const rawExt = lastDot !== -1 ? leafName.slice(lastDot) : '.png';
+  const rawBase = lastDot !== -1 ? leafName.slice(0, lastDot) : leafName;
 
-  // Clean the base name to alphanumeric, or use 'img' if too long / messy
-  let base = originalName.substring(0, lastDot !== -1 ? lastDot : originalName.length)
-    .replace(/[^a-zA-Z0-9]/g, '_')
-    .toLowerCase();
+  // Keep the uploaded name intact; only replace characters that break Markdown URLs or filesystems
+  const cleanBase = rawBase.replace(/\s+/g, '_').replace(/[<>:"/\\|?*\x00-\x1f()\[\]]/g, '') || 'image';
+  const cleanExt = rawExt.replace(/\s+/g, '').replace(/[<>:"/\\|?*\x00-\x1f()\[\]]/g, '') || '.png';
 
-  // If base name is long, UUID-like, or meaningless, shorten to max 8 chars
-  if (base.length > 10 || /^image\d*$/i.test(base) || /^[0-9a-f_-]{10,}$/i.test(base)) {
-    base = 'img';
-  }
-
-  let candidate = `${base}${ext}`;
+  let candidate = `${cleanBase}${cleanExt}`;
   let counter = 1;
   while (existingNames.has(candidate)) {
-    candidate = `${base}_${counter}${ext}`;
+    candidate = `${cleanBase}_${counter}${cleanExt}`;
     counter++;
   }
   return candidate;
+}
+
+interface HistorySnapshot {
+  rawMarkdown: string;
+  assets: ProjectAsset[];
+  customCss: string;
 }
 
 export default function App() {
@@ -104,30 +120,67 @@ export default function App() {
     return USER_EMBEDDED_CSS;
   });
 
-  // Undo / Redo Document History Engine
-  const [history, setHistory] = useState<{ rawMarkdown: string; assets: ProjectAsset[]; customCss: string }[]>(() => [
-    { rawMarkdown, assets, customCss }
-  ]);
-  const [historyIndex, setHistoryIndex] = useState<number>(0);
+  // Always keep latest refs so async callbacks never act on stale closures
+  const rawMarkdownRef = useRef(rawMarkdown);
+  rawMarkdownRef.current = rawMarkdown;
+  const assetsRef = useRef(assets);
+  assetsRef.current = assets;
+  const customCssRef = useRef(customCss);
+  customCssRef.current = customCss;
+
+  // Firebase Auth & Cloud Sync state
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const currentUserRef = useRef<User | null>(null);
+  currentUserRef.current = currentUser;
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const cloudHydratedRef = useRef(false);
+  const cloudLoadedForUidRef = useRef<string | null>(null);
+  const hasUserEditedRef = useRef(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [frontmatterOpen, setFrontmatterOpen] = useState(false);
+  // User requested image tab (media manager) open by default
+  const [mediaManagerOpen, setMediaManagerOpen] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = useCallback((message: string, duration = 3000) => {
+    setToastMessage(message);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, duration);
+  }, []);
+
+  // Unified Undo / Redo Document History Engine (single state avoids nested setState bugs in React 19)
+  const [historyState, setHistoryState] = useState<{
+    entries: HistorySnapshot[];
+    index: number;
+  }>(() => ({
+    entries: [{ rawMarkdown, assets, customCss }],
+    index: 0,
+  }));
   const isHistoryAction = useRef(false);
-  const historyIndexRef = useRef(0);
-  historyIndexRef.current = historyIndex;
 
   // Push a state snapshot into the history stack
   const pushHistorySnapshot = useCallback((newMd: string, newAssets: ProjectAsset[], newCss: string) => {
     if (isHistoryAction.current) return;
-    setHistory(prev => {
-      const curIdx = historyIndexRef.current;
-      const cur = prev[curIdx];
+    hasUserEditedRef.current = true;
+    setHistoryState(prev => {
+      const cur = prev.entries[prev.index];
       if (cur && cur.rawMarkdown === newMd && cur.assets === newAssets && cur.customCss === newCss) {
         return prev;
       }
-      const sliced = prev.slice(0, curIdx + 1);
-      const next = [...sliced, { rawMarkdown: newMd, assets: newAssets, customCss: newCss }].slice(-50);
-      const nextIdx = next.length - 1;
-      historyIndexRef.current = nextIdx;
-      setHistoryIndex(nextIdx);
-      return next;
+      const sliced = prev.entries.slice(0, prev.index + 1);
+      const nextEntries = [...sliced, { rawMarkdown: newMd, assets: newAssets, customCss: newCss }].slice(-50);
+      return {
+        entries: nextEntries,
+        index: nextEntries.length - 1,
+      };
     });
   }, []);
 
@@ -142,55 +195,67 @@ export default function App() {
 
   // Undo: Revert to previous document snapshot
   const handleUndo = useCallback(() => {
-    const curIdx = historyIndexRef.current;
-    if (curIdx <= 0) return;
-    const targetIdx = curIdx - 1;
-    const snapshot = history[targetIdx];
-    if (!snapshot) return;
+    setHistoryState(prev => {
+      if (prev.index <= 0) return prev;
+      const targetIdx = prev.index - 1;
+      const snapshot = prev.entries[targetIdx];
+      if (!snapshot) return prev;
 
-    isHistoryAction.current = true;
-    historyIndexRef.current = targetIdx;
-    setHistoryIndex(targetIdx);
+      const assetsChanged = snapshot.assets !== assetsRef.current;
+      isHistoryAction.current = true;
+      queueMicrotask(() => {
+        setRawMarkdown(snapshot.rawMarkdown);
+        setAssets(snapshot.assets);
+        setCustomCss(snapshot.customCss);
+        showToast('Undo (Ctrl+Z)', 1200);
+        setTimeout(() => {
+          isHistoryAction.current = false;
+        }, 100);
 
-    setRawMarkdown(snapshot.rawMarkdown);
-    setAssets(snapshot.assets);
-    setCustomCss(snapshot.customCss);
+        if (assetsChanged && currentUserRef.current && cloudHydratedRef.current) {
+          const uid = currentUserRef.current.uid;
+          setIsSyncingCloud(true);
+          syncAllAssetsToCloud(uid, snapshot.assets, true)
+            .catch((err) => console.error('Cloud undo sync error:', err))
+            .finally(() => setIsSyncingCloud(false));
+        }
+      });
 
-    setToastMessage('Undo (Ctrl+Z)');
-    setTimeout(() => {
-      isHistoryAction.current = false;
-      setToastMessage(null);
-    }, 1000);
-  }, [history]);
+      return { ...prev, index: targetIdx };
+    });
+  }, [showToast]);
 
   // Redo: Advance to next document snapshot
   const handleRedo = useCallback(() => {
-    const curIdx = historyIndexRef.current;
-    if (curIdx >= history.length - 1) return;
-    const targetIdx = curIdx + 1;
-    const snapshot = history[targetIdx];
-    if (!snapshot) return;
+    setHistoryState(prev => {
+      if (prev.index >= prev.entries.length - 1) return prev;
+      const targetIdx = prev.index + 1;
+      const snapshot = prev.entries[targetIdx];
+      if (!snapshot) return prev;
 
-    isHistoryAction.current = true;
-    historyIndexRef.current = targetIdx;
-    setHistoryIndex(targetIdx);
+      const assetsChanged = snapshot.assets !== assetsRef.current;
+      isHistoryAction.current = true;
+      queueMicrotask(() => {
+        setRawMarkdown(snapshot.rawMarkdown);
+        setAssets(snapshot.assets);
+        setCustomCss(snapshot.customCss);
+        showToast('Redo (Ctrl+Y)', 1200);
+        setTimeout(() => {
+          isHistoryAction.current = false;
+        }, 100);
 
-    setRawMarkdown(snapshot.rawMarkdown);
-    setAssets(snapshot.assets);
-    setCustomCss(snapshot.customCss);
+        if (assetsChanged && currentUserRef.current && cloudHydratedRef.current) {
+          const uid = currentUserRef.current.uid;
+          setIsSyncingCloud(true);
+          syncAllAssetsToCloud(uid, snapshot.assets, true)
+            .catch((err) => console.error('Cloud redo sync error:', err))
+            .finally(() => setIsSyncingCloud(false));
+        }
+      });
 
-    setToastMessage('Redo (Ctrl+Y)');
-    setTimeout(() => {
-      isHistoryAction.current = false;
-      setToastMessage(null);
-    }, 1000);
-  }, [history]);
-
-  const [frontmatterOpen, setFrontmatterOpen] = useState(false);
-  // User requested image tab (media manager) open by default
-  const [mediaManagerOpen, setMediaManagerOpen] = useState(true);
-  const [isExporting, setIsExporting] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+      return { ...prev, index: targetIdx };
+    });
+  }, [showToast]);
 
   // Parse frontmatter and body reactively
   const { frontmatter, body } = useMemo(() => {
@@ -199,47 +264,60 @@ export default function App() {
 
   // Update frontmatter from inspector or directly from preview header
   const handleFrontmatterChange = useCallback((updatedFm: Frontmatter) => {
-    setRawMarkdown(prev => {
-      const updatedMd = replaceFrontmatterInDoc(prev, updatedFm);
-      pushHistorySnapshot(updatedMd, assets, customCss);
-      return updatedMd;
-    });
-  }, [assets, customCss, pushHistorySnapshot]);
+    const updatedMd = replaceFrontmatterInDoc(rawMarkdownRef.current, updatedFm);
+    setRawMarkdown(updatedMd);
+    pushHistorySnapshot(updatedMd, assetsRef.current, customCssRef.current);
+  }, [pushHistorySnapshot]);
 
   // Update markdown body from direct in-place preview editing
   const handleMarkdownBodyChange = useCallback((newBody: string) => {
-    setRawMarkdown(prev => {
-      const { frontmatter: currentFm } = parseDocument(prev);
-      const fmString = stringifyFrontmatter(currentFm);
-      const cleaned = cleanRunawayBackslashes(newBody.trim());
-      // Also catch any base64 image strings that may have slipped in
-      const { cleanedMd, newAssets } = extractAndCleanBase64Images(cleaned, assets);
-      let updatedAssets = assets;
-      if (newAssets.length > 0) {
-        updatedAssets = [...assets, ...newAssets];
-        setAssets(updatedAssets);
+    const { frontmatter: currentFm } = parseDocument(rawMarkdownRef.current);
+    const fmString = stringifyFrontmatter(currentFm);
+    const cleaned = cleanRunawayBackslashes(newBody.trim());
+    // Also catch any base64 image strings that may have slipped in
+    const { cleanedMd, newAssets } = extractAndCleanBase64Images(cleaned, assetsRef.current);
+    let updatedAssets = assetsRef.current;
+    if (newAssets.length > 0) {
+      const normalizedNewAssets = newAssets.map((a) => ({
+        ...a,
+        id: toSafeFirestoreId(a.id),
+      }));
+      updatedAssets = [...assetsRef.current, ...normalizedNewAssets];
+      setAssets(updatedAssets);
+
+      if (currentUserRef.current && cloudHydratedRef.current) {
+        const uid = currentUserRef.current.uid;
+        setIsSyncingCloud(true);
+        Promise.all(normalizedNewAssets.map((a) => saveCloudAsset(uid, a)))
+          .catch((err) => console.error('Cloud base64 asset sync error:', err))
+          .finally(() => setIsSyncingCloud(false));
       }
-      const fullDoc = `${fmString}\n\n${cleanedMd}`;
-      pushHistorySnapshot(fullDoc, updatedAssets, customCss);
-      return fullDoc;
-    });
-  }, [assets, customCss, pushHistorySnapshot]);
+    }
+    const fullDoc = `${fmString}\n\n${cleanedMd}`;
+    setRawMarkdown(fullDoc);
+    pushHistorySnapshot(fullDoc, updatedAssets, customCssRef.current);
+  }, [pushHistorySnapshot]);
 
   // Update image asset directly after rescaling (keeps markdown, HTML, and CSS untouched)
   const handleUpdateAsset = useCallback((updatedAsset: ProjectAsset) => {
-    setAssets(prev => {
-      const updatedList = prev.map(a => a.id === updatedAsset.id ? updatedAsset : a);
-      pushHistorySnapshot(rawMarkdown, updatedList, customCss);
-      return updatedList;
-    });
+    const updatedList = assetsRef.current.map(a => a.id === updatedAsset.id ? updatedAsset : a);
+    setAssets(updatedList);
+    pushHistorySnapshot(rawMarkdownRef.current, updatedList, customCssRef.current);
     const dimText = updatedAsset.width && updatedAsset.height ? ` to ${updatedAsset.width}×${updatedAsset.height}px` : '';
-    setToastMessage(`Rescaled ${updatedAsset.name}${dimText}`);
-    setTimeout(() => setToastMessage(null), 3000);
-  }, [rawMarkdown, customCss, pushHistorySnapshot]);
+    showToast(`Rescaled ${updatedAsset.name}${dimText}`);
+
+    if (currentUserRef.current && cloudHydratedRef.current) {
+      const uid = currentUserRef.current.uid;
+      setIsSyncingCloud(true);
+      saveCloudAsset(uid, updatedAsset)
+        .catch((err) => console.error('Cloud rescale sync error:', err))
+        .finally(() => setIsSyncingCloud(false));
+    }
+  }, [pushHistorySnapshot, showToast]);
 
   // Drag-and-release rescale callback from document preview
   const handleRescaleImagePixels = useCallback(async (assetId: string, width: number, height: number) => {
-    const asset = assets.find(a => a.id === assetId);
+    const asset = assetsRef.current.find(a => a.id === assetId);
     if (!asset) return;
 
     try {
@@ -259,103 +337,123 @@ export default function App() {
         originalSize: asset.originalSize || asset.size,
       };
 
-      setAssets(prev => {
-        const nextAssets = prev.map(a => a.id === assetId ? updated : a);
-        pushHistorySnapshot(rawMarkdown, nextAssets, customCss);
-        return nextAssets;
-      });
-      setToastMessage(`Rescaled ${asset.name} to ${result.width}×${result.height}px (Undo: Ctrl+Z)`);
-      setTimeout(() => setToastMessage(null), 3000);
+      const nextAssets = assetsRef.current.map(a => a.id === assetId ? updated : a);
+      setAssets(nextAssets);
+      pushHistorySnapshot(rawMarkdownRef.current, nextAssets, customCssRef.current);
+      showToast(`Rescaled ${asset.name} to ${result.width}×${result.height}px (Undo: Ctrl+Z)`);
+
+      if (currentUserRef.current && cloudHydratedRef.current) {
+        const uid = currentUserRef.current.uid;
+        setIsSyncingCloud(true);
+        saveCloudAsset(uid, updated)
+          .catch((err) => console.error('Cloud preview rescale sync error:', err))
+          .finally(() => setIsSyncingCloud(false));
+      }
     } catch (err) {
       console.error('Failed to rescale image from preview drag:', err);
     }
-  }, [assets, rawMarkdown, customCss, pushHistorySnapshot]);
+  }, [pushHistorySnapshot, showToast]);
 
-  // Process dropped files into assets with short clean names and dimension metadata
+  // Process uploaded/dropped files into assets keeping the exact uploaded filename
   const handleAddFiles = useCallback((files: File[]) => {
-    const totalFiles = files.length;
+    const imageFiles = files.filter(
+      f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name)
+    );
+    const totalFiles = imageFiles.length;
     if (totalFiles === 0) return;
 
-    setAssets(prevAssets => {
-      const existingNames = new Set(prevAssets.map(a => a.name));
-      const newlyAddedAssets: ProjectAsset[] = [];
-      const snippetsToInsert: string[] = [];
+    const existingNames = new Set(assetsRef.current.map(a => a.name));
+    const newlyAddedAssets: ProjectAsset[] = [];
+    const snippetsToInsert: string[] = [];
+    let processedCount = 0;
 
-      let processedCount = 0;
+    imageFiles.forEach((file, idx) => {
+      const preservedName = preserveUploadedImageName(file.name, existingNames);
+      existingNames.add(preservedName);
+      const path = `images/${preservedName}`;
+      const id = toSafeFirestoreId(`${preservedName}-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`);
 
-      files.forEach(file => {
-        // Generate short clean name e.g. shot_1.png or img_1.jpg
-        const shortName = generateShortImageName(file.name, existingNames);
-        existingNames.add(shortName);
-        const path = `images/${shortName}`;
-        const id = `${shortName}-${Date.now()}`;
+      const checkDone = () => {
+        processedCount++;
+        if (processedCount === totalFiles && newlyAddedAssets.length > 0) {
+          const nextAssets = [...assetsRef.current, ...newlyAddedAssets];
+          const nextMd = rawMarkdownRef.current + snippetsToInsert.join('');
+          setAssets(nextAssets);
+          setRawMarkdown(nextMd);
+          setMediaManagerOpen(true);
+          pushHistorySnapshot(nextMd, nextAssets, customCssRef.current);
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const dataUrl = e.target?.result as string;
-          if (dataUrl) {
-            const img = new Image();
-            img.onload = () => {
-              const w = img.naturalWidth || 800;
-              const h = img.naturalHeight || 600;
-              newlyAddedAssets.push({
-                id,
-                name: shortName,
-                path,
-                dataUrl,
-                size: file.size,
-                type: file.type || 'image/png',
-                addedAt: Date.now(),
-                width: w,
-                height: h,
-                originalDataUrl: dataUrl,
-                originalWidth: w,
-                originalHeight: h,
-                originalSize: file.size,
-              });
-              snippetsToInsert.push(`\n\n![${shortName}](${path})\n`);
-              checkDone();
-            };
-            img.onerror = () => {
-              newlyAddedAssets.push({
-                id,
-                name: shortName,
-                path,
-                dataUrl,
-                size: file.size,
-                type: file.type || 'image/png',
-                addedAt: Date.now(),
-                originalDataUrl: dataUrl,
-              });
-              snippetsToInsert.push(`\n\n![${shortName}](${path})\n`);
-              checkDone();
-            };
-            img.src = dataUrl;
+          if (currentUserRef.current && cloudHydratedRef.current) {
+            const uid = currentUserRef.current.uid;
+            setIsSyncingCloud(true);
+            Promise.all([
+              saveCloudWorkspace(uid, nextMd, customCssRef.current),
+              ...newlyAddedAssets.map((asset) => saveCloudAsset(uid, asset)),
+            ])
+              .then(() => {
+                showToast(`Saved ${newlyAddedAssets.length} image(s) to cloud & images/`);
+              })
+              .catch((err) => {
+                console.error('Cloud image upload sync error:', err);
+                showToast(`Added ${newlyAddedAssets.length} image(s) locally (cloud sync failed)`);
+              })
+              .finally(() => setIsSyncingCloud(false));
           } else {
+            showToast(`Added ${newlyAddedAssets.length} image(s) to images/ directory`);
+          }
+        }
+      };
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        if (dataUrl) {
+          const img = new Image();
+          img.onload = () => {
+            const w = img.naturalWidth || 800;
+            const h = img.naturalHeight || 600;
+            newlyAddedAssets.push({
+              id,
+              name: preservedName,
+              path,
+              dataUrl,
+              size: file.size,
+              type: file.type || 'image/png',
+              addedAt: Date.now(),
+              width: w,
+              height: h,
+              originalDataUrl: dataUrl,
+              originalWidth: w,
+              originalHeight: h,
+              originalSize: file.size,
+            });
+            snippetsToInsert.push(`\n\n![${preservedName}](${path})\n`);
             checkDone();
-          }
+          };
+          img.onerror = () => {
+            newlyAddedAssets.push({
+              id,
+              name: preservedName,
+              path,
+              dataUrl,
+              size: file.size,
+              type: file.type || 'image/png',
+              addedAt: Date.now(),
+              originalDataUrl: dataUrl,
+            });
+            snippetsToInsert.push(`\n\n![${preservedName}](${path})\n`);
+            checkDone();
+          };
+          img.src = dataUrl;
+        } else {
+          checkDone();
+        }
+      };
+      reader.onerror = () => checkDone();
 
-          function checkDone() {
-            processedCount++;
-            if (processedCount === totalFiles) {
-              if (newlyAddedAssets.length > 0) {
-                setAssets(curr => [...curr, ...newlyAddedAssets]);
-                setRawMarkdown(currMd => currMd + snippetsToInsert.join(''));
-                // Ensure image tab is open and notify user
-                setMediaManagerOpen(true);
-                setToastMessage(`Added ${newlyAddedAssets.length} image(s) to images/ directory`);
-                setTimeout(() => setToastMessage(null), 3000);
-              }
-            }
-          }
-        };
-
-        reader.readAsDataURL(file);
-      });
-
-      return prevAssets;
+      reader.readAsDataURL(file);
     });
-  }, []);
+  }, [pushHistorySnapshot, showToast]);
 
   const saveToLocalStorage = useCallback((md: string, css: string, assetList: ProjectAsset[]) => {
     try {
@@ -378,43 +476,215 @@ export default function App() {
     }
   }, []);
 
-  // Debounced auto-save to browser local storage
+  // Hydrate full local project (including large uploaded images) from IndexedDB on initial mount
+  useEffect(() => {
+    let cancelled = false;
+    loadLocalProjectFromIdb().then((idbData) => {
+      if (cancelled || !idbData) return;
+      // Do not overwrite if cloud project already loaded or user already started editing
+      if (cloudLoadedForUidRef.current || hasUserEditedRef.current) return;
+
+      const isLegacy =
+        typeof idbData.rawMarkdown === 'string' &&
+        idbData.rawMarkdown.includes('title: "Assignment 1"') &&
+        idbData.rawMarkdown.includes('project: Design Document');
+
+      if (isLegacy) return;
+
+      const restoredMd =
+        typeof idbData.rawMarkdown === 'string' && idbData.rawMarkdown.trim()
+          ? cleanRunawayBackslashes(idbData.rawMarkdown)
+          : rawMarkdownRef.current;
+      const restoredCss =
+        typeof idbData.customCss === 'string' ? idbData.customCss : customCssRef.current;
+      const restoredAssets =
+        Array.isArray(idbData.assets) && idbData.assets.length > 0
+          ? idbData.assets
+          : assetsRef.current;
+
+      isHistoryAction.current = true;
+      setRawMarkdown(restoredMd);
+      setCustomCss(restoredCss);
+      setAssets(restoredAssets);
+      setHistoryState({
+        entries: [{ rawMarkdown: restoredMd, assets: restoredAssets, customCss: restoredCss }],
+        index: 0,
+      });
+      setTimeout(() => {
+        isHistoryAction.current = false;
+      }, 100);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Subscribe to Firebase Authentication & load/migrate Cloud Workspace + Images
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setCurrentUser(firebaseUser);
+      setAuthLoading(false);
+
+      if (!firebaseUser) {
+        cloudHydratedRef.current = false;
+        cloudLoadedForUidRef.current = null;
+        return;
+      }
+
+      if (cloudLoadedForUidRef.current === firebaseUser.uid) {
+        return;
+      }
+
+      cloudHydratedRef.current = false;
+      setIsSyncingCloud(true);
+
+      try {
+        const cloud = await loadCloudProject(firebaseUser.uid);
+        if (auth.currentUser?.uid !== firebaseUser.uid) return;
+
+        if (cloud.workspaceExists) {
+          const nextMd =
+            cloud.rawMarkdown !== null && cloud.rawMarkdown.trim()
+              ? cleanRunawayBackslashes(cloud.rawMarkdown)
+              : rawMarkdownRef.current;
+          const nextCss =
+            cloud.customCss !== null ? cloud.customCss : customCssRef.current;
+          const nextAssets = cloud.assets;
+
+          isHistoryAction.current = true;
+          setRawMarkdown(nextMd);
+          setCustomCss(nextCss);
+          setAssets(nextAssets);
+          setHistoryState({
+            entries: [{ rawMarkdown: nextMd, assets: nextAssets, customCss: nextCss }],
+            index: 0,
+          });
+          setTimeout(() => {
+            isHistoryAction.current = false;
+          }, 100);
+
+          saveToLocalStorage(nextMd, nextCss, nextAssets);
+          await saveLocalProjectToIdb({
+            rawMarkdown: nextMd,
+            customCss: nextCss,
+            assets: nextAssets,
+            savedAt: Date.now(),
+          });
+
+          cloudLoadedForUidRef.current = firebaseUser.uid;
+          cloudHydratedRef.current = true;
+          showToast(
+            `Signed in — loaded ${nextAssets.length} saved image${nextAssets.length === 1 ? '' : 's'} from cloud`
+          );
+        } else {
+          // Brand-new cloud account: upload current local workspace & all images right away
+          const mdToSave = rawMarkdownRef.current;
+          const cssToSave = customCssRef.current;
+          const assetsToSave = assetsRef.current;
+
+          await saveCloudWorkspace(firebaseUser.uid, mdToSave, cssToSave);
+          await syncAllAssetsToCloud(firebaseUser.uid, assetsToSave, false);
+
+          cloudLoadedForUidRef.current = firebaseUser.uid;
+          cloudHydratedRef.current = true;
+          showToast(
+            `Google connected — saved ${assetsToSave.length} image${assetsToSave.length === 1 ? '' : 's'} to cloud`
+          );
+        }
+      } catch (err) {
+        console.error('Failed to sync cloud project on sign-in:', err);
+        cloudHydratedRef.current = false;
+        showToast('Cloud sync failed — keeping local project', 4000);
+      } finally {
+        setIsSyncingCloud(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [saveToLocalStorage, showToast]);
+
+  // Debounced auto-save to IndexedDB, localStorage, and Firestore workspace (if signed in)
   useEffect(() => {
     const timer = setTimeout(() => {
       saveToLocalStorage(rawMarkdown, customCss, assets);
+      saveLocalProjectToIdb({
+        rawMarkdown,
+        customCss,
+        assets,
+        savedAt: Date.now(),
+      });
+
+      if (currentUser && cloudHydratedRef.current) {
+        saveCloudWorkspace(currentUser.uid, rawMarkdown, customCss).catch((err) => {
+          console.error('Auto-save cloud workspace error:', err);
+        });
+      }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [rawMarkdown, customCss, assets, saveToLocalStorage]);
+  }, [rawMarkdown, customCss, assets, currentUser, saveToLocalStorage]);
 
   const handleRemoveAsset = useCallback((id: string) => {
-    setAssets(prev => prev.filter(a => a.id !== id));
-  }, []);
+    const nextAssets = assetsRef.current.filter(a => a.id !== id);
+    setAssets(nextAssets);
+    pushHistorySnapshot(rawMarkdownRef.current, nextAssets, customCssRef.current);
+
+    if (currentUserRef.current && cloudHydratedRef.current) {
+      const uid = currentUserRef.current.uid;
+      setIsSyncingCloud(true);
+      deleteCloudAsset(uid, id)
+        .catch((err) => console.error('Cloud asset delete error:', err))
+        .finally(() => setIsSyncingCloud(false));
+    }
+  }, [pushHistorySnapshot]);
 
   const handleInsertMarkdown = useCallback((snippet: string) => {
     setRawMarkdown(prev => prev + '\n' + snippet);
   }, []);
 
-  // Saves to local storage AND exports the project ZIP (triggered by button or Ctrl+S)
+  // Saves to IndexedDB, local storage, Firestore cloud (if signed in), AND exports the project ZIP
   const handleSaveProject = useCallback(async () => {
     try {
       setIsExporting(true);
-      // 1. Immediately persist state to browser local storage
+      // 1. Immediately persist state to browser local storage & IndexedDB
       saveToLocalStorage(rawMarkdown, customCss, assets);
+      await saveLocalProjectToIdb({
+        rawMarkdown,
+        customCss,
+        assets,
+        savedAt: Date.now(),
+      });
 
-      // 2. Export & download the full ZIP to local disk
+      // 2. If signed in with Google, flush workspace + all assets to Firestore
+      let syncedCloud = false;
+      if (currentUserRef.current) {
+        const uid = currentUserRef.current.uid;
+        setIsSyncingCloud(true);
+        try {
+          await saveCloudWorkspace(uid, rawMarkdown, customCss);
+          await syncAllAssetsToCloud(uid, assets, true);
+          syncedCloud = true;
+        } finally {
+          setIsSyncingCloud(false);
+        }
+      }
+
+      // 3. Export & download the full ZIP to local disk
       await exportProjectZip(frontmatter, rawMarkdown, assets, customCss);
 
-      // 3. Show feedback toast
-      setToastMessage('Saved to local storage & exported ZIP (Ctrl+S)');
-      setTimeout(() => setToastMessage(null), 3000);
+      // 4. Show feedback toast
+      showToast(
+        syncedCloud
+          ? 'Saved to cloud, local storage & exported ZIP (Ctrl+S)'
+          : 'Saved to local storage & exported ZIP (Ctrl+S)'
+      );
     } catch (err) {
       console.error('Failed to export project zip:', err);
-      setToastMessage('Save failed. Please check console for details.');
-      setTimeout(() => setToastMessage(null), 3000);
+      showToast('Save failed. Please check console for details.');
     } finally {
       setIsExporting(false);
     }
-  }, [frontmatter, rawMarkdown, assets, customCss, saveToLocalStorage]);
+  }, [frontmatter, rawMarkdown, assets, customCss, saveToLocalStorage, showToast]);
 
   // Global window listener for Ctrl+S (Save), Ctrl+Z (Undo), Ctrl+Y (Redo)
   useEffect(() => {
@@ -466,41 +736,93 @@ export default function App() {
     downloadHtmlFile(frontmatter, body, customCss);
   }, [frontmatter, body, customCss]);
 
-  const handleResetTemplate = useCallback(() => {
+  const handleResetTemplate = useCallback(async () => {
     try {
       localStorage.removeItem(LOCAL_STORAGE_KEY);
     } catch (e) {}
-    setRawMarkdown(cleanRunawayBackslashes(INITIAL_MARKDOWN));
+    await clearLocalProjectIdb();
+
+    const resetMd = cleanRunawayBackslashes(INITIAL_MARKDOWN);
+    isHistoryAction.current = true;
+    setRawMarkdown(resetMd);
     setAssets(DEFAULT_ASSETS);
     setCustomCss(USER_EMBEDDED_CSS);
-    setToastMessage('Template reset to blank');
-    setTimeout(() => setToastMessage(null), 2500);
-  }, []);
+    setHistoryState({
+      entries: [{ rawMarkdown: resetMd, assets: DEFAULT_ASSETS, customCss: USER_EMBEDDED_CSS }],
+      index: 0,
+    });
+    setTimeout(() => {
+      isHistoryAction.current = false;
+    }, 100);
+
+    if (currentUserRef.current && cloudHydratedRef.current) {
+      const uid = currentUserRef.current.uid;
+      setIsSyncingCloud(true);
+      try {
+        await saveCloudWorkspace(uid, resetMd, USER_EMBEDDED_CSS);
+        await syncAllAssetsToCloud(uid, DEFAULT_ASSETS, true);
+      } catch (err) {
+        console.error('Cloud reset sync error:', err);
+      } finally {
+        setIsSyncingCloud(false);
+      }
+    }
+
+    showToast('Template reset to default', 2500);
+  }, [showToast]);
 
   const handleImportMd = useCallback((text: string, filename?: string) => {
     if (!text || !text.trim()) return;
     const cleaned = cleanRunawayBackslashes(text);
     setRawMarkdown(cleaned);
-    saveToLocalStorage(cleaned, customCss, assets);
+    pushHistorySnapshot(cleaned, assetsRef.current, customCssRef.current);
+    saveToLocalStorage(cleaned, customCssRef.current, assetsRef.current);
+    saveLocalProjectToIdb({
+      rawMarkdown: cleaned,
+      customCss: customCssRef.current,
+      assets: assetsRef.current,
+      savedAt: Date.now(),
+    });
     setActiveTab('writer');
-    setToastMessage(`Imported ${filename || 'markdown file'}`);
-    setTimeout(() => setToastMessage(null), 2500);
-  }, [customCss, assets, saveToLocalStorage]);
+    showToast(`Imported ${filename || 'markdown file'}`, 2500);
+  }, [pushHistorySnapshot, saveToLocalStorage, showToast]);
 
-  // Prevent browser from navigating to dropped file anywhere in the window (which causes white screen)
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err: any) {
+      const code = err?.code || '';
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        return;
+      }
+      console.error('Google sign-in failed:', err);
+      showToast('Google Sign-In failed. Please allow popups and try again.', 3500);
+    }
+  }, [showToast]);
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await signOut(auth);
+      cloudLoadedForUidRef.current = null;
+      cloudHydratedRef.current = false;
+      showToast('Signed out — local backup preserved', 2500);
+    } catch (err) {
+      console.error('Sign-out failed:', err);
+      showToast('Sign-out failed', 2500);
+    }
+  }, [showToast]);
+
+  // Prevent browser from navigating to dropped file anywhere in the window (which causes white screen).
+  // Note: Image drops are intentionally ONLY handled by MediaManager & MarkdownEditor, NOT the preview.
   useEffect(() => {
     const handleWinDragOver = (e: DragEvent) => {
       e.preventDefault();
-      if (e.dataTransfer) {
-        e.dataTransfer.dropEffect = 'copy';
-      }
     };
 
     const handleWinDrop = (e: DragEvent) => {
       e.preventDefault();
       if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         const files = Array.from(e.dataTransfer.files);
-
         // Check for Markdown file import (.md or .markdown)
         const mdFile = files.find(f => f.name.endsWith('.md') || f.name.endsWith('.markdown'));
         if (mdFile) {
@@ -513,12 +835,6 @@ export default function App() {
           };
           reader.readAsText(mdFile);
         }
-
-        // Check for images (by MIME type or file extension)
-        const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name));
-        if (imageFiles.length > 0) {
-          handleAddFiles(imageFiles);
-        }
       }
     };
 
@@ -528,21 +844,17 @@ export default function App() {
       window.removeEventListener('dragover', handleWinDragOver);
       window.removeEventListener('drop', handleWinDrop);
     };
-  }, [handleAddFiles, handleImportMd]);
+  }, [handleImportMd]);
 
-  // React element drag-and-drop listener on page
+  // React element drag-and-drop listener on page (only prevents default navigation & handles .md files)
   const handleGlobalDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
   };
 
   const handleGlobalDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const files = Array.from(e.dataTransfer.files);
-
-      // Check for Markdown file import (.md or .markdown)
       const mdFile = files.find(f => f.name.endsWith('.md') || f.name.endsWith('.markdown'));
       if (mdFile) {
         const reader = new FileReader();
@@ -553,12 +865,6 @@ export default function App() {
           }
         };
         reader.readAsText(mdFile);
-      }
-
-      // Check for images
-      const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name));
-      if (imageFiles.length > 0) {
-        handleAddFiles(imageFiles);
       }
     }
   };
@@ -589,8 +895,22 @@ export default function App() {
         isExporting={isExporting}
         onUndo={handleUndo}
         onRedo={handleRedo}
-        canUndo={historyIndex > 0}
-        canRedo={historyIndex < history.length - 1}
+        canUndo={historyState.index > 0}
+        canRedo={historyState.index < historyState.entries.length - 1}
+        user={
+          currentUser
+            ? {
+                uid: currentUser.uid,
+                displayName: currentUser.displayName,
+                email: currentUser.email,
+                photoURL: currentUser.photoURL,
+              }
+            : null
+        }
+        authLoading={authLoading}
+        isSyncingCloud={isSyncingCloud}
+        onGoogleSignIn={handleGoogleSignIn}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Workspace Area */}
@@ -639,7 +959,6 @@ export default function App() {
                     assets={assets}
                     customCss={customCss}
                     onSaveShortcut={handleSaveProject}
-                    onDropFiles={handleAddFiles}
                     onRescaleImagePixels={handleRescaleImagePixels}
                     onUndo={handleUndo}
                     onRedo={handleRedo}
@@ -657,7 +976,6 @@ export default function App() {
                 assets={assets}
                 customCss={customCss}
                 onSaveShortcut={handleSaveProject}
-                onDropFiles={handleAddFiles}
                 onRescaleImagePixels={handleRescaleImagePixels}
                 onUndo={handleUndo}
                 onRedo={handleRedo}

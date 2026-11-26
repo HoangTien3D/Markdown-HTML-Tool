@@ -1,0 +1,198 @@
+{
+  "entities": {
+    "UserWorkspace": {
+      "title": "UserWorkspace",
+      "description": "Stores a signed-in user's design document Markdown source and custom CSS stylesheet.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "maxLength": 128
+        },
+        "rawMarkdown": {
+          "type": "string",
+          "description": "Full Markdown document including YAML frontmatter.",
+          "maxLength": 800000
+        },
+        "customCss": {
+          "type": "string",
+          "description": "Embedded CSS stylesheet for the document.",
+          "maxLength": 200000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the workspace was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest update."
+        }
+      },
+      "required": ["userId", "rawMarkdown", "customCss", "createdAt", "updatedAt"]
+    },
+    "ProjectAssetDoc": {
+      "title": "ProjectAssetDoc",
+      "description": "Metadata and inline payload (or chunk count) for an uploaded or rescaled image asset.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "maxLength": 128
+        },
+        "assetId": {
+          "type": "string",
+          "description": "Document identifier for the asset.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Original uploaded filename.",
+          "maxLength": 256
+        },
+        "path": {
+          "type": "string",
+          "description": "Relative Markdown path under images/.",
+          "maxLength": 300
+        },
+        "type": {
+          "type": "string",
+          "description": "MIME type of the image.",
+          "maxLength": 100
+        },
+        "size": {
+          "type": "number",
+          "description": "Current byte size of the image."
+        },
+        "width": {
+          "type": "number",
+          "description": "Current pixel width."
+        },
+        "height": {
+          "type": "number",
+          "description": "Current pixel height."
+        },
+        "addedAt": {
+          "type": "number",
+          "description": "Client timestamp when added."
+        },
+        "inlineDataUrl": {
+          "type": "string",
+          "description": "Inline data URL if under 450KB, otherwise empty string.",
+          "maxLength": 450000
+        },
+        "chunkCount": {
+          "type": "number",
+          "description": "Number of current image chunks in subcollection."
+        },
+        "originalInlineDataUrl": {
+          "type": "string",
+          "description": "Inline original data URL if under 450KB, otherwise empty string.",
+          "maxLength": 450000
+        },
+        "originalChunkCount": {
+          "type": "number",
+          "description": "Number of original image chunks in subcollection."
+        },
+        "originalWidth": {
+          "type": "number",
+          "description": "Original pixel width."
+        },
+        "originalHeight": {
+          "type": "number",
+          "description": "Original pixel height."
+        },
+        "originalSize": {
+          "type": "number",
+          "description": "Original byte size."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "userId",
+        "assetId",
+        "name",
+        "path",
+        "type",
+        "size",
+        "width",
+        "height",
+        "addedAt",
+        "inlineDataUrl",
+        "chunkCount",
+        "originalInlineDataUrl",
+        "originalChunkCount",
+        "originalWidth",
+        "originalHeight",
+        "originalSize",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AssetChunkDoc": {
+      "title": "AssetChunkDoc",
+      "description": "Chunked data segment for large image assets exceeding inline document threshold.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "maxLength": 128
+        },
+        "assetId": {
+          "type": "string",
+          "description": "Parent asset ID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["current", "original"],
+          "description": "Whether chunk belongs to current or original image dataUrl."
+        },
+        "chunkIndex": {
+          "type": "number",
+          "description": "Zero-based chunk order index."
+        },
+        "data": {
+          "type": "string",
+          "description": "Slice of dataUrl string.",
+          "maxLength": 450000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        }
+      },
+      "required": ["userId", "assetId", "kind", "chunkIndex", "data", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/workspaces/{workspaceId}": {
+      "schema": { "$ref": "#/entities/UserWorkspace" },
+      "description": "Private user workspace storing Markdown and CSS."
+    },
+    "/users/{userId}/assets/{assetId}": {
+      "schema": { "$ref": "#/entities/ProjectAssetDoc" },
+      "description": "Private user uploaded image asset metadata and inline data."
+    },
+    "/users/{userId}/assets/{assetId}/chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/AssetChunkDoc" },
+      "description": "Subcollection storing large image data chunks under parent asset."
+    }
+  }
+}

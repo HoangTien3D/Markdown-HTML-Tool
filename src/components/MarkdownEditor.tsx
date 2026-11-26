@@ -120,25 +120,29 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   };
 
   const handleDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer?.types?.includes('Files')) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
+    if (!isDragOver) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
+    if (!e.dataTransfer?.files || e.dataTransfer.files.length === 0) {
+      setIsDragOver(false);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
 
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      onDropFiles(Array.from(e.dataTransfer.files));
-    }
+    onDropFiles(Array.from(e.dataTransfer.files));
   };
 
   const wordCount = value.trim() ? value.trim().split(/\s+/).length : 0;

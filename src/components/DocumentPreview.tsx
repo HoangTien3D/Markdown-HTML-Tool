@@ -3,11 +3,7 @@ import {
   Edit3, 
   Lock, 
   Unlock, 
-  Maximize2, 
-  RotateCcw,
-  ExternalLink,
-  Sliders,
-  CheckCircle2
+  ExternalLink
 } from 'lucide-react';
 import { Frontmatter, ProjectAsset } from '../types';
 import { generateStandaloneHtml } from '../utils/htmlGenerator';
@@ -21,7 +17,6 @@ interface DocumentPreviewProps {
   assets: ProjectAsset[];
   customCss?: string;
   onSaveShortcut?: () => void;
-  onDropFiles?: (files: File[]) => void;
   onRescaleImagePixels?: (assetId: string, width: number, height: number) => void;
   onUndo?: () => void;
   onRedo?: () => void;
@@ -35,7 +30,6 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   assets,
   customCss = '',
   onSaveShortcut,
-  onDropFiles,
   onRescaleImagePixels,
   onUndo,
   onRedo,
@@ -49,6 +43,26 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   const prevFrontmatterJson = useRef('');
   const prevMarkdownBody = useRef('');
   const prevCustomCss = useRef('');
+  const hasInitializedSrcdoc = useRef(false);
+  const srcdocTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Latest refs so iframe event handlers NEVER read stale closures after in-place updates
+  const assetsRef = useRef(assets);
+  assetsRef.current = assets;
+  const frontmatterRef = useRef(frontmatter);
+  frontmatterRef.current = frontmatter;
+  const onFrontmatterChangeRef = useRef(onFrontmatterChange);
+  onFrontmatterChangeRef.current = onFrontmatterChange;
+  const onMarkdownBodyChangeRef = useRef(onMarkdownBodyChange);
+  onMarkdownBodyChangeRef.current = onMarkdownBodyChange;
+  const onRescaleImagePixelsRef = useRef(onRescaleImagePixels);
+  onRescaleImagePixelsRef.current = onRescaleImagePixels;
+  const onSaveShortcutRef = useRef(onSaveShortcut);
+  onSaveShortcutRef.current = onSaveShortcut;
+  const onUndoRef = useRef(onUndo);
+  onUndoRef.current = onUndo;
+  const onRedoRef = useRef(onRedo);
+  onRedoRef.current = onRedo;
 
   // Asset lookup map: replaces images/xxx with dataUrl for preview inside iframe
   const assetMap = useMemo(() => {
@@ -66,7 +80,8 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     return generateStandaloneHtml(frontmatter, markdownBody, customCss, assetMap);
   }, [frontmatter, markdownBody, customCss, assetMap]);
 
-  // Sync HTML into iframe without leaking styles to outer app, preserving scroll position!
+  // Sync HTML into iframe without leaking styles to outer app, preserving scroll position
+  // and debouncing rapid typing so the iframe doesn't thrash or flash white!
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
@@ -100,16 +115,37 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
       return;
     }
 
-    // Capture current scroll before replacing srcdoc
-    if (iframe.contentWindow) {
-      const currentScroll = iframe.contentWindow.scrollY || iframe.contentDocument?.documentElement.scrollTop || 0;
-      if (currentScroll > 0) {
-        savedScrollY.current = currentScroll;
+    const applySrcdoc = () => {
+      if (!iframeRef.current || isTypingInsideIframe.current) return;
+      if (iframeRef.current.contentWindow) {
+        const currentScroll = iframeRef.current.contentWindow.scrollY || iframeRef.current.contentDocument?.documentElement.scrollTop || 0;
+        if (currentScroll > 0) {
+          savedScrollY.current = currentScroll;
+        }
       }
+      iframeRef.current.srcdoc = fullHtml;
+    };
+
+    if (srcdocTimerRef.current) {
+      clearTimeout(srcdocTimerRef.current);
+      srcdocTimerRef.current = null;
     }
 
-    iframe.srcdoc = fullHtml;
-  }, [fullHtml, frontmatter, markdownBody, customCss, assetMap]);
+    if (!hasInitializedSrcdoc.current) {
+      hasInitializedSrcdoc.current = true;
+      applySrcdoc();
+    } else {
+      // Debounce rapid markdown/CSS edits so typing fast never resets iframe mid-load
+      srcdocTimerRef.current = setTimeout(applySrcdoc, 160);
+    }
+
+    return () => {
+      if (srcdocTimerRef.current) {
+        clearTimeout(srcdocTimerRef.current);
+        srcdocTimerRef.current = null;
+      }
+    };
+  }, [fullHtml, frontmatter, markdownBody, customCss, assets]);
 
   // Setup event listeners and contentEditable inside the iframe once loaded
   const handleIframeLoad = useCallback(() => {
@@ -144,11 +180,11 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
 
         try {
           let html = currentHtml;
-          for (const asset of assets) {
+          for (const asset of assetsRef.current) {
             html = html.split(asset.dataUrl).join(asset.path);
           }
           const md = convertHtmlToMarkdown(html);
-          onMarkdownBodyChange(md);
+          onMarkdownBodyChangeRef.current(md);
         } catch (e) {
           console.warn('Error converting HTML to Markdown on blur:', e);
         }
@@ -173,12 +209,13 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
         if (!titleEdited) return;
         titleEdited = false;
         const val = titleEl.innerText.trim();
+        const currentFm = frontmatterRef.current;
         let cleaned = val;
-        if (frontmatter.report_number !== undefined && frontmatter.report_number !== '') {
+        if (currentFm.report_number !== undefined && currentFm.report_number !== '') {
           cleaned = val.replace(/^report\s+\d+:\s*/i, '').trim();
         }
-        if (cleaned !== (frontmatter.title || '')) {
-          onFrontmatterChange({ ...frontmatter, title: cleaned });
+        if (cleaned !== (currentFm.title || '')) {
+          onFrontmatterChangeRef.current({ ...currentFm, title: cleaned });
         }
       });
     }
@@ -198,13 +235,14 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
         if (!projectEdited) return;
         projectEdited = false;
         const val = projectEl.innerText.trim();
-        if (frontmatter.subtitle !== undefined) {
-          if (val !== frontmatter.subtitle) {
-            onFrontmatterChange({ ...frontmatter, subtitle: val });
+        const currentFm = frontmatterRef.current;
+        if (currentFm.subtitle !== undefined) {
+          if (val !== currentFm.subtitle) {
+            onFrontmatterChangeRef.current({ ...currentFm, subtitle: val });
           }
         } else {
-          if (val !== (frontmatter.project || '')) {
-            onFrontmatterChange({ ...frontmatter, project: val });
+          if (val !== (currentFm.project || '')) {
+            onFrontmatterChangeRef.current({ ...currentFm, project: val });
           }
         }
       });
@@ -225,8 +263,9 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
         if (!cwdEdited) return;
         cwdEdited = false;
         const val = cwdCodeEl.innerText.trim();
-        if (val !== (frontmatter.project_dir || '')) {
-          onFrontmatterChange({ ...frontmatter, project_dir: val });
+        const currentFm = frontmatterRef.current;
+        if (val !== (currentFm.project_dir || '')) {
+          onFrontmatterChangeRef.current({ ...currentFm, project_dir: val });
         }
       });
     }
@@ -246,13 +285,14 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
         if (!abstractEdited) return;
         abstractEdited = false;
         const val = abstractP.innerText.trim();
-        if (frontmatter.abstract !== undefined) {
-          if (val !== frontmatter.abstract) {
-            onFrontmatterChange({ ...frontmatter, abstract: val });
+        const currentFm = frontmatterRef.current;
+        if (currentFm.abstract !== undefined) {
+          if (val !== currentFm.abstract) {
+            onFrontmatterChangeRef.current({ ...currentFm, abstract: val });
           }
         } else {
-          if (val !== (frontmatter.tldr || '')) {
-            onFrontmatterChange({ ...frontmatter, tldr: val });
+          if (val !== (currentFm.tldr || '')) {
+            onFrontmatterChangeRef.current({ ...currentFm, tldr: val });
           }
         }
       });
@@ -264,9 +304,10 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
       statusEl.style.cursor = 'pointer';
       statusEl.title = 'Click to cycle QA Verdict (PASS / FAIL / PENDING)';
       statusEl.addEventListener('click', () => {
-        const cur = String(frontmatter.qa_verdict || '').toUpperCase();
+        const currentFm = frontmatterRef.current;
+        const cur = String(currentFm.qa_verdict || '').toUpperCase();
         const next = cur === 'PASS' ? 'FAIL' : cur === 'FAIL' ? 'PENDING' : cur === 'PENDING' ? '' : 'PASS';
-        onFrontmatterChange({ ...frontmatter, qa_verdict: next });
+        onFrontmatterChangeRef.current({ ...currentFm, qa_verdict: next });
       });
     }
 
@@ -302,56 +343,50 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
 
       if (e.key.toLowerCase() === 's') {
         e.preventDefault();
-        onSaveShortcut?.();
+        onSaveShortcutRef.current?.();
       } else if (e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
-          onRedo?.();
+          onRedoRef.current?.();
         } else {
-          onUndo?.();
+          onUndoRef.current?.();
         }
       } else if (e.key.toLowerCase() === 'y') {
         e.preventDefault();
-        onRedo?.();
+        onRedoRef.current?.();
       }
     };
     doc.addEventListener('keydown', handleKeyDown);
 
-    // 8. CRITICAL: Intercept drag-and-drop on preview iframe to prevent browser inserting massive raw base64 data URLs!
-    const handleIframeDragOver = (e: DragEvent) => {
-      if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.dataTransfer.dropEffect = 'copy';
-      }
-    };
-
-    const handleIframeDrop = (e: DragEvent) => {
+    // 8. Block file drag-and-drop & pasted image binaries onto the preview so it neither uploads nor navigates/inserts raw base64
+    const blockIframeDragOver = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        const files = Array.from(e.dataTransfer.files);
-        const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name));
-        if (imageFiles.length > 0) {
-          onDropFiles?.(imageFiles);
-        }
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'none';
       }
     };
 
-    const handleIframePaste = (e: ClipboardEvent) => {
+    const blockIframeDrop = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const blockIframeImagePaste = (e: ClipboardEvent) => {
       if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
         const files = Array.from(e.clipboardData.files);
-        const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name));
-        if (imageFiles.length > 0) {
+        const hasImage = files.some(f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name));
+        if (hasImage) {
           e.preventDefault();
           e.stopPropagation();
-          onDropFiles?.(imageFiles);
         }
       }
     };
 
-    doc.addEventListener('dragover', handleIframeDragOver);
-    doc.addEventListener('drop', handleIframeDrop);
+    doc.addEventListener('dragover', blockIframeDragOver);
+    doc.addEventListener('drop', blockIframeDrop);
+    doc.addEventListener('paste', blockIframeImagePaste);
+
     // 9. Interactive Drag-and-Release Image Rescaling directly on the preview
     // Does NOT open the modal window; rescales the image asset directly when drag is released!
     const existingOverlay = doc.getElementById('img-resize-overlay');
@@ -435,12 +470,14 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
       }
     });
 
-    // Attach click listeners to all images in article to select them for resizing
+    // Attach click listeners & disable native contentEditable drag-cloning on all images in article
     if (article) {
       const imgElements = article.querySelectorAll('img');
       imgElements.forEach(img => {
         img.style.cursor = 'pointer';
         img.title = 'Click to activate drag-and-release resize handle';
+        img.draggable = false;
+        img.addEventListener('dragstart', (e) => e.preventDefault());
         img.addEventListener('click', (e) => {
           e.stopPropagation();
           activeImg = img;
@@ -496,13 +533,13 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
       const path = imgToRescale.getAttribute('data-asset-path') || '';
       const bareName = path.replace('images/', '');
       const src = imgToRescale.getAttribute('src') || '';
-      const match = assets.find(a => 
+      const match = assetsRef.current.find(a => 
         (path && (a.path === path || a.name === bareName || a.name === path)) ||
         a.dataUrl === src
       );
 
       if (match && targetW > 0 && targetH > 0) {
-        onRescaleImagePixels?.(match.id, targetW, targetH);
+        onRescaleImagePixelsRef.current?.(match.id, targetW, targetH);
       }
 
       setTimeout(() => {
@@ -532,7 +569,7 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     });
-  }, [directEditEnabled, frontmatter, onFrontmatterChange, onMarkdownBodyChange, assets, onSaveShortcut, onDropFiles, onRescaleImagePixels, onUndo, onRedo]);
+  }, [directEditEnabled]);
 
   // Open standalone HTML in new window/tab
   const handleOpenNewWindow = () => {
@@ -583,23 +620,17 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
         </div>
       </div>
 
-      {/* Sandboxed Iframe Container: ZERO Style Leakage & Handled Drop */}
+      {/* Sandboxed Iframe Container: ZERO Style Leakage & Drag/Drop Blocked */}
       <div 
         className="flex-1 w-full h-full relative bg-black"
         onDragOver={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          e.dataTransfer.dropEffect = 'none';
         }}
         onDrop={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const files = Array.from(e.dataTransfer.files);
-            const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(f.name));
-            if (imageFiles.length > 0) {
-              onDropFiles?.(imageFiles);
-            }
-          }
         }}
       >
         <iframe

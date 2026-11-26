@@ -63,15 +63,18 @@ export function generateStandaloneHtml(
   const renderer: any = new marked.Renderer();
   
   renderer.heading = function({ text, depth }: any) {
-    const id = slugify(String(text).replace(/<[^>]+>/g, ''));
-    return `<h${depth} id="${id}">${text}</h${depth}>`;
+    const safeText = String(text ?? '');
+    const id = slugify(safeText.replace(/<[^>]+>/g, ''));
+    return `<h${depth} id="${id}">${safeText}</h${depth}>`;
   };
 
   renderer.table = function(token: any) {
-    const headerHtml = token.header?.map((cell: any) => `<th>${cell.text}</th>`).join('') || '';
-    const rowsHtml = token.rows?.map((row: any) => 
-      `<tr>${row.map((cell: any) => `<td>${cell.text}</td>`).join('')}</tr>`
-    ).join('') || '';
+    const headerCells = Array.isArray(token?.header) ? token.header : [];
+    const bodyRows = Array.isArray(token?.rows) ? token.rows : [];
+    const headerHtml = headerCells.map((cell: any) => `<th>${cell?.text ?? ''}</th>`).join('');
+    const rowsHtml = bodyRows.map((row: any) =>
+      `<tr>${(Array.isArray(row) ? row : []).map((cell: any) => `<td>${cell?.text ?? ''}</td>`).join('')}</tr>`
+    ).join('');
 
     return `<table>
   <thead><tr>${headerHtml}</tr></thead>
@@ -80,25 +83,35 @@ export function generateStandaloneHtml(
   };
 
   renderer.image = function({ href, title, text }: any) {
-    let resolvedSrc = href || '';
-    let assetPath = href || '';
-    if (assetMap) {
-      if (assetMap.has(href)) {
-        resolvedSrc = assetMap.get(href) || href;
-      } else if (assetMap.has(`images/${href}`)) {
-        resolvedSrc = assetMap.get(`images/${href}`) || href;
-        assetPath = `images/${href}`;
-      } else if (href.startsWith('images/')) {
-        const bareName = href.replace('images/', '');
+    const safeHref = String(href ?? '');
+    const safeText = String(text ?? '');
+    const safeTitle = String(title ?? '');
+    let resolvedSrc = safeHref;
+    let assetPath = safeHref;
+    if (assetMap && safeHref) {
+      if (assetMap.has(safeHref)) {
+        resolvedSrc = assetMap.get(safeHref) || safeHref;
+      } else if (assetMap.has(`images/${safeHref}`)) {
+        resolvedSrc = assetMap.get(`images/${safeHref}`) || safeHref;
+        assetPath = `images/${safeHref}`;
+      } else if (safeHref.startsWith('images/')) {
+        const bareName = safeHref.replace('images/', '');
         if (assetMap.has(bareName)) {
-          resolvedSrc = assetMap.get(bareName) || href;
+          resolvedSrc = assetMap.get(bareName) || safeHref;
         }
       }
     }
-    return `<img src="${resolvedSrc}" alt="${text || ''}" title="${title || ''}" data-asset-path="${assetPath}" />`;
+    return `<img src="${escapeHtml(resolvedSrc)}" alt="${escapeHtml(safeText)}" title="${escapeHtml(safeTitle)}" data-asset-path="${escapeHtml(assetPath)}" />`;
   };
 
-  const parsedBody = marked.parse(markdownBody, { renderer, gfm: true }) as string;
+  const safeBody = String(markdownBody ?? '');
+  let parsedBody = '';
+  try {
+    parsedBody = marked.parse(safeBody, { renderer, gfm: true }) as string;
+  } catch (err) {
+    console.warn('Markdown parse fallback:', err);
+    parsedBody = `<pre>${escapeHtml(safeBody)}</pre>`;
+  }
 
   // Replace status tokens [DONE], [FIXED], [VERIFIED], [PENDING], [BROKEN], [PASS], [FAIL]
   const enhancedBody = parsedBody.replace(
@@ -114,9 +127,9 @@ export function generateStandaloneHtml(
     }
   );
 
-  const headings = extractHeadings(markdownBody);
+  const headings = extractHeadings(safeBody);
 
-  const verdict = String(frontmatter.qa_verdict || '').toUpperCase();
+  const verdict = String(frontmatter?.qa_verdict ?? '').toUpperCase();
   const verdictStatusClass = verdict === 'PASS' 
     ? 'status verified' 
     : verdict === 'FAIL' 
@@ -125,21 +138,21 @@ export function generateStandaloneHtml(
         ? 'status pending' 
         : 'status';
 
-  const rawTitle = frontmatter.title || 'Untitled Document';
+  const rawTitle = String(frontmatter?.title ?? 'Untitled Document');
   const cleanedTitle = rawTitle.replace(/^report\s+\d+:\s*/i, '').trim();
-  const paddedNum = formatReportNumber(frontmatter.report_number);
+  const paddedNum = formatReportNumber(frontmatter?.report_number);
   const displayTitle = paddedNum ? `Report ${paddedNum}: ${cleanedTitle || 'Untitled Document'}` : rawTitle;
 
-  const subtitle = frontmatter.subtitle || frontmatter.project || '';
-  const authorName = frontmatter.name || frontmatter.operator || '';
-  const studentNum = frontmatter.student_number ? String(frontmatter.student_number) : '';
-  const subject = frontmatter.subject || '';
-  const dateFormatted = formatReportDate(frontmatter.date);
+  const subtitle = String(frontmatter?.subtitle ?? frontmatter?.project ?? '');
+  const authorName = String(frontmatter?.name ?? frontmatter?.operator ?? '');
+  const studentNum = frontmatter?.student_number ? String(frontmatter.student_number) : '';
+  const subject = String(frontmatter?.subject ?? '');
+  const dateFormatted = formatReportDate(frontmatter?.date);
 
-  const abstractContent = frontmatter.abstract || frontmatter.tldr || '';
-  const abstractLabel = frontmatter.abstract ? 'Abstract' : (frontmatter.tldr ? 'TL;DR' : '');
+  const abstractContent = String(frontmatter?.abstract ?? frontmatter?.tldr ?? '');
+  const abstractLabel = frontmatter?.abstract ? 'Abstract' : (frontmatter?.tldr ? 'TL;DR' : '');
 
-  const hasMath = markdownBody.includes('$');
+  const hasMath = safeBody.includes('$');
 
   const footerText = paddedNum
     ? `${displayTitle} | ${frontmatter.report_number} | Generated ${dateFormatted} | report-${paddedNum}.html`

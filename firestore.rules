@@ -1,0 +1,179 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny all paths unless explicitly allowed below
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ---- Shared Hardened Primitives ----
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedOwner(userId) {
+      return isSignedIn()
+        && request.auth.uid == userId
+        && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // ---- Entity Validation Helpers (Blueprint Sync) ----
+    function isValidUserWorkspace(data, userId) {
+      return data.keys().hasAll(['userId', 'rawMarkdown', 'customCss', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'rawMarkdown', 'customCss', 'createdAt', 'updatedAt'])
+        && data.userId is string && data.userId == userId && data.userId == request.auth.uid
+        && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.rawMarkdown is string && data.rawMarkdown.size() <= 800000
+        && data.customCss is string && data.customCss.size() <= 200000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProjectAsset(data, userId, assetId) {
+      return data.keys().hasAll([
+          'userId', 'assetId', 'name', 'path', 'type', 'size', 'width', 'height',
+          'addedAt', 'inlineDataUrl', 'chunkCount', 'originalInlineDataUrl',
+          'originalChunkCount', 'originalWidth', 'originalHeight', 'originalSize',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'assetId', 'name', 'path', 'type', 'size', 'width', 'height',
+          'addedAt', 'inlineDataUrl', 'chunkCount', 'originalInlineDataUrl',
+          'originalChunkCount', 'originalWidth', 'originalHeight', 'originalSize',
+          'createdAt', 'updatedAt'
+        ])
+        && data.userId is string && data.userId == userId && data.userId == request.auth.uid
+        && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.assetId is string && data.assetId == assetId && isValidId(data.assetId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 256
+        && data.path is string && data.path.size() >= 1 && data.path.size() <= 300
+        && data.type is string && data.type.size() >= 1 && data.type.size() <= 100
+        && data.size is number && data.size >= 0
+        && data.width is number && data.width >= 0
+        && data.height is number && data.height >= 0
+        && data.addedAt is number && data.addedAt >= 0
+        && data.inlineDataUrl is string && data.inlineDataUrl.size() <= 450000
+        && data.chunkCount is number && data.chunkCount >= 0 && data.chunkCount <= 40
+        && data.originalInlineDataUrl is string && data.originalInlineDataUrl.size() <= 450000
+        && data.originalChunkCount is number && data.originalChunkCount >= 0 && data.originalChunkCount <= 40
+        && data.originalWidth is number && data.originalWidth >= 0
+        && data.originalHeight is number && data.originalHeight >= 0
+        && data.originalSize is number && data.originalSize >= 0
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAssetChunk(data, userId, assetId) {
+      return data.keys().hasAll(['userId', 'assetId', 'kind', 'chunkIndex', 'data', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'assetId', 'kind', 'chunkIndex', 'data', 'createdAt'])
+        && data.userId is string && data.userId == userId && data.userId == request.auth.uid
+        && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.assetId is string && data.assetId == assetId && isValidId(data.assetId)
+        && data.kind is string && (data.kind == 'current' || data.kind == 'original')
+        && data.chunkIndex is number && data.chunkIndex >= 0 && data.chunkIndex <= 40
+        && data.data is string && data.data.size() >= 1 && data.data.size() <= 450000
+        && data.createdAt is timestamp;
+    }
+
+    // ---- Collection: /users/{userId}/workspaces/{workspaceId} ----
+    match /users/{userId}/workspaces/{workspaceId} {
+      allow get: if isVerifiedOwner(userId) && isValidId(userId) && isValidId(workspaceId);
+      allow list: if isVerifiedOwner(userId) && isValidId(userId) && existing().userId == request.auth.uid;
+
+      allow create: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidId(workspaceId)
+        && isValidUserWorkspace(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidId(workspaceId)
+        && isValidUserWorkspace(incoming(), userId)
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['rawMarkdown', 'customCss', 'updatedAt']);
+
+      allow delete: if isVerifiedOwner(userId) && isValidId(userId) && isValidId(workspaceId);
+    }
+
+    // ---- Collection: /users/{userId}/assets/{assetId} ----
+    match /users/{userId}/assets/{assetId} {
+      allow get: if isVerifiedOwner(userId) && isValidId(userId) && isValidId(assetId);
+      allow list: if isVerifiedOwner(userId) && isValidId(userId) && existing().userId == request.auth.uid;
+
+      allow create: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidId(assetId)
+        && isValidProjectAsset(incoming(), userId, assetId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidId(assetId)
+        && isValidProjectAsset(incoming(), userId, assetId)
+        && incoming().userId == existing().userId
+        && incoming().assetId == existing().assetId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'path', 'type', 'size', 'width', 'height',
+          'inlineDataUrl', 'chunkCount', 'originalInlineDataUrl',
+          'originalChunkCount', 'originalWidth', 'originalHeight', 'originalSize',
+          'updatedAt'
+        ]);
+
+      allow delete: if isVerifiedOwner(userId) && isValidId(userId) && isValidId(assetId);
+
+      // ---- Subcollection (Master Gate): /users/{userId}/assets/{assetId}/chunks/{chunkId} ----
+      match /chunks/{chunkId} {
+        allow get: if isVerifiedOwner(userId)
+          && isValidId(userId)
+          && isValidId(assetId)
+          && isValidId(chunkId)
+          && exists(/databases/$(database)/documents/users/$(userId)/assets/$(assetId))
+          && get(/databases/$(database)/documents/users/$(userId)/assets/$(assetId)).data.userId == request.auth.uid;
+
+        allow list: if isVerifiedOwner(userId)
+          && isValidId(userId)
+          && isValidId(assetId)
+          && existing().userId == request.auth.uid;
+
+        allow create: if isVerifiedOwner(userId)
+          && isValidId(userId)
+          && isValidId(assetId)
+          && isValidId(chunkId)
+          && isValidAssetChunk(incoming(), userId, assetId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId)/assets/$(assetId))
+          && get(/databases/$(database)/documents/users/$(userId)/assets/$(assetId)).data.userId == request.auth.uid;
+
+        allow update: if false; // Chunks are immutable; write new chunk IDs or delete & recreate
+
+        allow delete: if isVerifiedOwner(userId)
+          && isValidId(userId)
+          && isValidId(assetId)
+          && isValidId(chunkId)
+          && exists(/databases/$(database)/documents/users/$(userId)/assets/$(assetId))
+          && get(/databases/$(database)/documents/users/$(userId)/assets/$(assetId)).data.userId == request.auth.uid;
+      }
+    }
+  }
+}
